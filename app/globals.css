@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+@theme {
+    --color-primary: #7B2CBF;
+    --color-secondary: #48CAE4;
+    --color-gray: #F9F9F9;
+    --color-dark: #111827;
+}
+
+.main-container {
+    @apply px-5;
+}
+
+.main-label {
+    @apply text-[12px] font-semibold capitalize text-white mb-1.5 block;
+
+    span {
+        @apply text-[#7B2CBF];
+    }
+
+    &.black {
+        @apply text-black;
+    }
+}
+
+.main-input {
+    @apply appearance-none block w-full px-3 py-2.5 border border-black/10 rounded-md placeholder-black/50 bg-white text-gray-900 focus:outline-none focus:border-[#7B2CBF] transition-colors duration-300 sm:text-xs;
+
+}
+.main-input-select{
+    @apply appearance-none block w-full px-3 py-2.5 border border-black/10 text-black/50 rounded-md placeholder-black/50 bg-white  focus:outline-none focus:border-[#7B2CBF] transition-colors duration-300 sm:text-xs;
+
+}
+
+.iti.iti--allow-dropdown{
+    @apply w-full;
+}
+.backdrop-blur-xs {
+    background: linear-gradient(0deg, rgba(255, 255, 255, 0.20) 0%, rgba(255, 255, 255, 0.20) 100%), rgba(0, 0, 0, 0.30);
+    backdrop-filter: blur(6px);
+}
+
+.auth-background {
+    background: linear-gradient(270deg, rgba(0, 0, 0, 0.30) 0%, rgba(0, 0, 0, 0.70) 100%), url('/images/login-bg.webp') lightgray 50% / cover no-repeat;
+}
+
+.login-button {
+    @apply mt-8 relative w-full flex justify-center py-3 px-4 text-sm font-medium rounded-md text-white bg-[#7B2CBF] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7B2CBF] disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden;
+    border: none;
+}
+
+.login-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to right, #48CAE4, #7B2CBF);
+    opacity: 0;
+    transition: opacity 500ms;
+    z-index: 0;
+    border-radius: inherit;
+}
+
+.login-button:hover:not(:disabled)::before {
+    opacity: 1;
+}
+
+.login-button>* {
+    position: relative;
+    z-index: 1;
+}
+
+.login-button span {
+    position: relative;
+    z-index: 1;
+}
+
+.sidebar-icon {
+    @apply w-full flex cursor-pointer items-center py-3 text-left transition-all text-white duration-300 px-2 rounded-lg bg-[#ffffff14];
+
+    .text {
+        @apply ml-3 font-semibold whitespace-nowrap text-xs text-[#F9F9F9]/50 transition-all duration-300;
+    }
+
+    /* svg{
+        @apply w-[18px];
+        path{
+            @apply w-[16px];
+        }
+    } */
+
+    &.active,
+    &:hover {
+        @apply text-primary;
+        background: linear-gradient(90deg, #DAF4FA 0%, #E5D5F2 100%);
+
+
+        path {
+            fill: url(#paint0_linear_8880_26766);
+        }
+
+        .text {
+            @apply text-primary;
+        }
+    }
+}
+
+/* Button Variants */
+.btn-primary {
+    @apply relative text-white bg-primary overflow-hidden flex items-center justify-center;
+    border: none;
+}
+
+.btn-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to right, #48CAE4, #7B2CBF);
+    opacity: 0;
+    transition: opacity 500ms;
+    z-index: 0;
+    border-radius: inherit;
+}
+
+.btn-primary:hover:not(:disabled)::before {
+    opacity: 1;
+}
+
+.btn-primary>* {
+    position: relative;
+    z-index: 1;
+}
+
+.btn-black {
+    @apply text-white bg-black;
+    border: none;
+}
+
+.btn-black:hover:not(:disabled) {
+    background-color: var(--color-secondary);
+}
+
+.btn-transparent {
+    @apply bg-transparent text-gray-700;
+    border: 1px solid rgba(0, 0, 0, 0.10);
+}
+
+.btn-transparent:hover:not(:disabled) {
+    border-color: rgba(0, 0, 0, 0.30);
+}
+
+.btn-transparent-red {
+    @apply bg-transparent text-gray-700;
+    border: 1px solid rgba(0, 0, 0, 0.10);
+}
+
+.btn-transparent-red:hover:not(:disabled) {
+    @apply text-red-500;
+    border-color: rgba(239, 68, 68, 0.50);
+}
+
+.btn-transparent-secondary {
+    @apply bg-transparent text-gray-700;
+    border: 1px solid rgba(0, 0, 0, 0.10);
+}
+
+.btn-transparent-secondary:hover:not(:disabled) {
+    color: var(--color-secondary);
+    border-color: rgba(72, 202, 228, 0.50);
+}
