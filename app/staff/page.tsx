@@ -9,6 +9,8 @@ import Button from "../../components/ui/Button";
 import SearchInput from "../../components/ui/SearchInput";
 import EditIcon from "../../components/Icons/EditIcon";
 import DeleteIcon from "../../components/Icons/DeleteIcon";
+import EyeIcon from "../../components/Icons/EyeIcon";
+import EyeSlashIcon from "../../components/Icons/EyeSlashIcon";
 import Arrow from "../../components/ui/Arrow";
 import Popup from "../../components/Popup";
 import intlTelInput from "intl-tel-input";
@@ -522,7 +524,7 @@ export default function Staff() {
                           <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-2">
                               {canEditStaff && (
-                                <div onClick={(e) => {
+                                <div className="h-[32px] w-[32px]" onClick={(e) => {
                                   e.stopPropagation();
                                   handleEditClick(member);
                                 }}>
@@ -958,6 +960,8 @@ function AddTeamMemberSidebar({
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const itiRef = useRef<ReturnType<typeof intlTelInput> | null>(null);
   
@@ -995,6 +999,8 @@ function AddTeamMemberSidebar({
         branch: editStaff.branchId ? String(editStaff.branchId) : (currentBranch?.id ? String(currentBranch.id) : ""), // Use branchId from staff member
         oldBranchId: editStaff.branchId || currentBranch?.id || "", // Store original branch ID
         calendarColor: editStaff.calendarColor || "#EF4444", // Use actual calendar color from API
+        password: "", // Password not shown in edit mode
+        passwordConfirmation: "", // Password confirmation not shown in edit mode
       };
     }
     return {
@@ -1009,231 +1015,14 @@ function AddTeamMemberSidebar({
       jobTitle: "",
       branch: currentBranch?.id || "",
       calendarColor: "#EF4444", // red
+      password: "",
+      passwordConfirmation: "",
     };
   };
   
   // Step 1: Personal Info
   const [personalInfo, setPersonalInfo] = useState(initializePersonalInfo());
-  
-  const countries = [
-    { code: "+1", flag: "🇺🇸", name: "United States" },
-    { code: "+1", flag: "🇨🇦", name: "Canada" },
-    { code: "+44", flag: "🇬🇧", name: "United Kingdom" },
-    { code: "+33", flag: "🇫🇷", name: "France" },
-    { code: "+49", flag: "🇩🇪", name: "Germany" },
-    { code: "+39", flag: "🇮🇹", name: "Italy" },
-    { code: "+34", flag: "🇪🇸", name: "Spain" },
-    { code: "+31", flag: "🇳🇱", name: "Netherlands" },
-    { code: "+32", flag: "🇧🇪", name: "Belgium" },
-    { code: "+41", flag: "🇨🇭", name: "Switzerland" },
-    { code: "+43", flag: "🇦🇹", name: "Austria" },
-    { code: "+46", flag: "🇸🇪", name: "Sweden" },
-    { code: "+47", flag: "🇳🇴", name: "Norway" },
-    { code: "+45", flag: "🇩🇰", name: "Denmark" },
-    { code: "+358", flag: "🇫🇮", name: "Finland" },
-    { code: "+351", flag: "🇵🇹", name: "Portugal" },
-    { code: "+353", flag: "🇮🇪", name: "Ireland" },
-    { code: "+30", flag: "🇬🇷", name: "Greece" },
-    { code: "+48", flag: "🇵🇱", name: "Poland" },
-    { code: "+420", flag: "🇨🇿", name: "Czech Republic" },
-    { code: "+36", flag: "🇭🇺", name: "Hungary" },
-    { code: "+40", flag: "🇷🇴", name: "Romania" },
-    { code: "+7", flag: "🇷🇺", name: "Russia" },
-    { code: "+7", flag: "🇰🇿", name: "Kazakhstan" },
-    { code: "+90", flag: "🇹🇷", name: "Turkey" },
-    { code: "+971", flag: "🇦🇪", name: "United Arab Emirates" },
-    { code: "+966", flag: "🇸🇦", name: "Saudi Arabia" },
-    { code: "+965", flag: "🇰🇼", name: "Kuwait" },
-    { code: "+974", flag: "🇶🇦", name: "Qatar" },
-    { code: "+973", flag: "🇧🇭", name: "Bahrain" },
-    { code: "+968", flag: "🇴🇲", name: "Oman" },
-    { code: "+961", flag: "🇱🇧", name: "Lebanon" },
-    { code: "+962", flag: "🇯🇴", name: "Jordan" },
-    { code: "+972", flag: "🇮🇱", name: "Israel" },
-    { code: "+20", flag: "🇪🇬", name: "Egypt" },
-    { code: "+212", flag: "🇲🇦", name: "Morocco" },
-    { code: "+213", flag: "🇩🇿", name: "Algeria" },
-    { code: "+216", flag: "🇹🇳", name: "Tunisia" },
-    { code: "+218", flag: "🇱🇾", name: "Libya" },
-    { code: "+249", flag: "🇸🇩", name: "Sudan" },
-    { code: "+251", flag: "🇪🇹", name: "Ethiopia" },
-    { code: "+254", flag: "🇰🇪", name: "Kenya" },
-    { code: "+27", flag: "🇿🇦", name: "South Africa" },
-    { code: "+234", flag: "🇳🇬", name: "Nigeria" },
-    { code: "+233", flag: "🇬🇭", name: "Ghana" },
-    { code: "+86", flag: "🇨🇳", name: "China" },
-    { code: "+81", flag: "🇯🇵", name: "Japan" },
-    { code: "+82", flag: "🇰🇷", name: "South Korea" },
-    { code: "+65", flag: "🇸🇬", name: "Singapore" },
-    { code: "+60", flag: "🇲🇾", name: "Malaysia" },
-    { code: "+66", flag: "🇹🇭", name: "Thailand" },
-    { code: "+62", flag: "🇮🇩", name: "Indonesia" },
-    { code: "+63", flag: "🇵🇭", name: "Philippines" },
-    { code: "+84", flag: "🇻🇳", name: "Vietnam" },
-    { code: "+91", flag: "🇮🇳", name: "India" },
-    { code: "+92", flag: "🇵🇰", name: "Pakistan" },
-    { code: "+880", flag: "🇧🇩", name: "Bangladesh" },
-    { code: "+94", flag: "🇱🇰", name: "Sri Lanka" },
-    { code: "+95", flag: "🇲🇲", name: "Myanmar" },
-    { code: "+61", flag: "🇦🇺", name: "Australia" },
-    { code: "+64", flag: "🇳🇿", name: "New Zealand" },
-    { code: "+55", flag: "🇧🇷", name: "Brazil" },
-    { code: "+52", flag: "🇲🇽", name: "Mexico" },
-    { code: "+54", flag: "🇦🇷", name: "Argentina" },
-    { code: "+56", flag: "🇨🇱", name: "Chile" },
-    { code: "+57", flag: "🇨🇴", name: "Colombia" },
-    { code: "+51", flag: "🇵🇪", name: "Peru" },
-    { code: "+58", flag: "🇻🇪", name: "Venezuela" },
-    { code: "+593", flag: "🇪🇨", name: "Ecuador" },
-    { code: "+595", flag: "🇵🇾", name: "Paraguay" },
-    { code: "+598", flag: "🇺🇾", name: "Uruguay" },
-    { code: "+591", flag: "🇧🇴", name: "Bolivia" },
-    { code: "+506", flag: "🇨🇷", name: "Costa Rica" },
-    { code: "+507", flag: "🇵🇦", name: "Panama" },
-    { code: "+502", flag: "🇬🇹", name: "Guatemala" },
-    { code: "+503", flag: "🇸🇻", name: "El Salvador" },
-    { code: "+504", flag: "🇭🇳", name: "Honduras" },
-    { code: "+505", flag: "🇳🇮", name: "Nicaragua" },
-    { code: "+506", flag: "🇨🇷", name: "Costa Rica" },
-    { code: "+507", flag: "🇵🇦", name: "Panama" },
-    { code: "+1", flag: "🇯🇲", name: "Jamaica" },
-    { code: "+1", flag: "🇹🇹", name: "Trinidad and Tobago" },
-    { code: "+1", flag: "🇧🇧", name: "Barbados" },
-    { code: "+380", flag: "🇺🇦", name: "Ukraine" },
-    { code: "+375", flag: "🇧🇾", name: "Belarus" },
-    { code: "+370", flag: "🇱🇹", name: "Lithuania" },
-    { code: "+371", flag: "🇱🇻", name: "Latvia" },
-    { code: "+372", flag: "🇪🇪", name: "Estonia" },
-    { code: "+385", flag: "🇭🇷", name: "Croatia" },
-    { code: "+386", flag: "🇸🇮", name: "Slovenia" },
-    { code: "+387", flag: "🇧🇦", name: "Bosnia and Herzegovina" },
-    { code: "+389", flag: "🇲🇰", name: "North Macedonia" },
-    { code: "+381", flag: "🇷🇸", name: "Serbia" },
-    { code: "+382", flag: "🇲🇪", name: "Montenegro" },
-    { code: "+383", flag: "🇽🇰", name: "Kosovo" },
-    { code: "+355", flag: "🇦🇱", name: "Albania" },
-    { code: "+359", flag: "🇧🇬", name: "Bulgaria" },
-    { code: "+356", flag: "🇲🇹", name: "Malta" },
-    { code: "+357", flag: "🇨🇾", name: "Cyprus" },
-    { code: "+352", flag: "🇱🇺", name: "Luxembourg" },
-    { code: "+377", flag: "🇲🇨", name: "Monaco" },
-    { code: "+378", flag: "🇸🇲", name: "San Marino" },
-    { code: "+39", flag: "🇻🇦", name: "Vatican City" },
-    { code: "+423", flag: "🇱🇮", name: "Liechtenstein" },
-    { code: "+376", flag: "🇦🇩", name: "Andorra" },
-    { code: "+354", flag: "🇮🇸", name: "Iceland" },
-    { code: "+298", flag: "🇫🇴", name: "Faroe Islands" },
-    { code: "+500", flag: "🇫🇰", name: "Falkland Islands" },
-    { code: "+350", flag: "🇬🇮", name: "Gibraltar" },
-    { code: "+590", flag: "🇬🇵", name: "Guadeloupe" },
-    { code: "+596", flag: "🇲🇶", name: "Martinique" },
-    { code: "+594", flag: "🇬🇫", name: "French Guiana" },
-    { code: "+262", flag: "🇷🇪", name: "Réunion" },
-    { code: "+230", flag: "🇲🇺", name: "Mauritius" },
-    { code: "+248", flag: "🇸🇨", name: "Seychelles" },
-    { code: "+960", flag: "🇲🇻", name: "Maldives" },
-    { code: "+670", flag: "🇹🇱", name: "East Timor" },
-    { code: "+673", flag: "🇧🇳", name: "Brunei" },
-    { code: "+855", flag: "🇰🇭", name: "Cambodia" },
-    { code: "+856", flag: "🇱🇦", name: "Laos" },
-    { code: "+976", flag: "🇲🇳", name: "Mongolia" },
-    { code: "+850", flag: "🇰🇵", name: "North Korea" },
-    { code: "+886", flag: "🇹🇼", name: "Taiwan" },
-    { code: "+852", flag: "🇭🇰", name: "Hong Kong" },
-    { code: "+853", flag: "🇲🇴", name: "Macau" },
-    { code: "+93", flag: "🇦🇫", name: "Afghanistan" },
-    { code: "+374", flag: "🇦🇲", name: "Armenia" },
-    { code: "+994", flag: "🇦🇿", name: "Azerbaijan" },
-    { code: "+995", flag: "🇬🇪", name: "Georgia" },
-    { code: "+998", flag: "🇺🇿", name: "Uzbekistan" },
-    { code: "+992", flag: "🇹🇯", name: "Tajikistan" },
-    { code: "+996", flag: "🇰🇬", name: "Kyrgyzstan" },
-    { code: "+993", flag: "🇹🇲", name: "Turkmenistan" },
-    { code: "+964", flag: "🇮🇶", name: "Iraq" },
-    { code: "+98", flag: "🇮🇷", name: "Iran" },
-    { code: "+964", flag: "🇮🇶", name: "Iraq" },
-    { code: "+963", flag: "🇸🇾", name: "Syria" },
-    { code: "+967", flag: "🇾🇪", name: "Yemen" },
-    { code: "+252", flag: "🇸🇴", name: "Somalia" },
-    { code: "+253", flag: "🇩🇯", name: "Djibouti" },
-    { code: "+255", flag: "🇹🇿", name: "Tanzania" },
-    { code: "+256", flag: "🇺🇬", name: "Uganda" },
-    { code: "+257", flag: "🇧🇮", name: "Burundi" },
-    { code: "+250", flag: "🇷🇼", name: "Rwanda" },
-    { code: "+255", flag: "🇹🇿", name: "Tanzania" },
-    { code: "+260", flag: "🇿🇲", name: "Zambia" },
-    { code: "+263", flag: "🇿🇼", name: "Zimbabwe" },
-    { code: "+265", flag: "🇲🇼", name: "Malawi" },
-    { code: "+258", flag: "🇲🇿", name: "Mozambique" },
-    { code: "+264", flag: "🇳🇦", name: "Namibia" },
-    { code: "+267", flag: "🇧🇼", name: "Botswana" },
-    { code: "+268", flag: "🇸🇿", name: "Eswatini" },
-    { code: "+266", flag: "🇱🇸", name: "Lesotho" },
-    { code: "+236", flag: "🇨🇫", name: "Central African Republic" },
-    { code: "+235", flag: "🇹🇩", name: "Chad" },
-    { code: "+237", flag: "🇨🇲", name: "Cameroon" },
-    { code: "+240", flag: "🇬🇶", name: "Equatorial Guinea" },
-    { code: "+241", flag: "🇬🇦", name: "Gabon" },
-    { code: "+242", flag: "🇨🇬", name: "Republic of the Congo" },
-    { code: "+243", flag: "🇨🇩", name: "DR Congo" },
-    { code: "+244", flag: "🇦🇴", name: "Angola" },
-    { code: "+245", flag: "🇬🇼", name: "Guinea-Bissau" },
-    { code: "+246", flag: "🇮🇴", name: "British Indian Ocean Territory" },
-    { code: "+247", flag: "🇦🇨", name: "Ascension Island" },
-    { code: "+290", flag: "🇸🇭", name: "Saint Helena" },
-    { code: "+291", flag: "🇪🇷", name: "Eritrea" },
-    { code: "+297", flag: "🇦🇼", name: "Aruba" },
-    { code: "+299", flag: "🇬🇱", name: "Greenland" },
-    { code: "+1", flag: "🇵🇷", name: "Puerto Rico" },
-    { code: "+1", flag: "🇻🇮", name: "US Virgin Islands" },
-    { code: "+1", flag: "🇬🇺", name: "Guam" },
-    { code: "+1", flag: "🇦🇸", name: "American Samoa" },
-    { code: "+1", flag: "🇲🇵", name: "Northern Mariana Islands" },
-    { code: "+1", flag: "🇻🇬", name: "British Virgin Islands" },
-    { code: "+1", flag: "🇰🇾", name: "Cayman Islands" },
-    { code: "+1", flag: "🇧🇲", name: "Bermuda" },
-    { code: "+1", flag: "🇦🇬", name: "Antigua and Barbuda" },
-    { code: "+1", flag: "🇧🇸", name: "Bahamas" },
-    { code: "+1", flag: "🇧🇧", name: "Barbados" },
-    { code: "+1", flag: "🇩🇲", name: "Dominica" },
-    { code: "+1", flag: "🇬🇩", name: "Grenada" },
-    { code: "+1", flag: "🇰🇳", name: "Saint Kitts and Nevis" },
-    { code: "+1", flag: "🇱🇨", name: "Saint Lucia" },
-    { code: "+1", flag: "🇻🇨", name: "Saint Vincent and the Grenadines" },
-    { code: "+509", flag: "🇭🇹", name: "Haiti" },
-    { code: "+1", flag: "🇩🇴", name: "Dominican Republic" },
-    { code: "+53", flag: "🇨🇺", name: "Cuba" },
-    { code: "+592", flag: "🇬🇾", name: "Guyana" },
-    { code: "+597", flag: "🇸🇷", name: "Suriname" },
-    { code: "+1", flag: "🇧🇿", name: "Belize" },
-    { code: "+501", flag: "🇧🇿", name: "Belize" },
-    { code: "+1", flag: "🇧🇿", name: "Belize" },
-    { code: "+1242", flag: "🇧🇸", name: "Bahamas" },
-    { code: "+1246", flag: "🇧🇧", name: "Barbados" },
-    { code: "+1264", flag: "🇦🇮", name: "Anguilla" },
-    { code: "+1268", flag: "🇦🇬", name: "Antigua and Barbuda" },
-    { code: "+1284", flag: "🇻🇬", name: "British Virgin Islands" },
-    { code: "+1340", flag: "🇻🇮", name: "US Virgin Islands" },
-    { code: "+1345", flag: "🇰🇾", name: "Cayman Islands" },
-    { code: "+1441", flag: "🇧🇲", name: "Bermuda" },
-    { code: "+1473", flag: "🇬🇩", name: "Grenada" },
-    { code: "+1649", flag: "🇹🇨", name: "Turks and Caicos Islands" },
-    { code: "+1664", flag: "🇲🇸", name: "Montserrat" },
-    { code: "+1670", flag: "🇲🇵", name: "Northern Mariana Islands" },
-    { code: "+1671", flag: "🇬🇺", name: "Guam" },
-    { code: "+1684", flag: "🇦🇸", name: "American Samoa" },
-    { code: "+1758", flag: "🇱🇨", name: "Saint Lucia" },
-    { code: "+1767", flag: "🇩🇲", name: "Dominica" },
-    { code: "+1784", flag: "🇻🇨", name: "Saint Vincent and the Grenadines" },
-    { code: "+1787", flag: "🇵🇷", name: "Puerto Rico" },
-    { code: "+1809", flag: "🇩🇴", name: "Dominican Republic" },
-    { code: "+1829", flag: "🇩🇴", name: "Dominican Republic" },
-    { code: "+1849", flag: "🇩🇴", name: "Dominican Republic" },
-    { code: "+1868", flag: "🇹🇹", name: "Trinidad and Tobago" },
-    { code: "+1869", flag: "🇰🇳", name: "Saint Kitts and Nevis" },
-    { code: "+1876", flag: "🇯🇲", name: "Jamaica" },
-    { code: "+1939", flag: "🇵🇷", name: "Puerto Rico" },
-  ];
+  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
 
   // Step 2: Assign Services
   const [serviceSearch, setServiceSearch] = useState("");
@@ -1260,6 +1049,10 @@ function AddTeamMemberSidebar({
     6: { enabled: false, shifts: [] }, // Sunday
   });
 
+  // Track which days exist in branch opening_hours (to disable toggles for days that don't exist)
+  // null means we haven't fetched yet, empty Set means no days available, Set with values means those days are available
+  const [branchAvailableDays, setBranchAvailableDays] = useState<Set<number> | null>(null);
+
   const steps = ["Personal Info", "Assign Services", "Working Days & Hours"];
   const calendarColors = [
     "#EF4444", // red
@@ -1273,12 +1066,168 @@ function AddTeamMemberSidebar({
   ];
 
   const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const dayNamesFull = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+  // Helper function to format workingDays for API (with day names and 24-hour time format)
+  const formatWorkingHoursForAPI = (workingDays: {
+    [key: number]: {
+      enabled: boolean;
+      shifts: Array<{ start_time: string; end_time: string }>;
+    };
+  }) => {
+    return Object.keys(workingDays).map((dayIndexStr) => {
+      const dayIndex = parseInt(dayIndexStr, 10);
+      const day = workingDays[dayIndex];
+      
+      return {
+        day: dayNamesFull[dayIndex],
+        enabled: day.enabled,
+        shifts: day.shifts.map((shift) => ({
+          start_time: convertTo24Hour(shift.start_time),
+          end_time: convertTo24Hour(shift.end_time),
+        })),
+      };
+    });
+  };
+
+  // Helper function to convert 24-hour time to 12-hour format
+  const convert24To12Hour = (time24h: string): string => {
+    if (!time24h) return "10:00 am";
+    
+    const time = time24h.trim().replace(/\s+/g, ''); // Remove all spaces
+    // Check if already in 12-hour format
+    if (/^\d{1,2}:\d{2}(am|pm)$/i.test(time)) {
+      // Format with space: "HH:MM am/pm"
+      const match = time.match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
+      if (match) {
+        return `${match[1]}:${match[2]} ${match[3].toLowerCase()}`;
+      }
+      return time;
+    }
+    
+    // Parse 24-hour format (HH:MM or HH:MM:SS)
+    const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = match[2];
+      
+      if (isNaN(hours) || hours < 0 || hours > 23) {
+        return "10:00 am";
+      }
+      
+      const period = hours >= 12 ? "pm" : "am";
+      const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+      
+      return `${displayHours.toString().padStart(2, "0")}:${minutes} ${period}`;
+    }
+    
+    // Fallback to default
+    return "10:00 am";
+  };
+
+  // Helper function to parse opening_hours and convert to workingDays format
+  const parseOpeningHours = (openingHours: any) => {
+    // Initialize all days as disabled
+    const initialWorkingDays: {
+      [key: number]: {
+        enabled: boolean;
+        shifts: Array<{ start_time: string; end_time: string }>;
+      };
+    } = {
+      0: { enabled: false, shifts: [] }, // Monday
+      1: { enabled: false, shifts: [] }, // Tuesday
+      2: { enabled: false, shifts: [] }, // Wednesday
+      3: { enabled: false, shifts: [] }, // Thursday
+      4: { enabled: false, shifts: [] }, // Friday
+      5: { enabled: false, shifts: [] }, // Saturday
+      6: { enabled: false, shifts: [] }, // Sunday
+    };
+
+    if (!openingHours) {
+      return initialWorkingDays;
+    }
+
+    // Day name to index mapping
+    const dayNameToIndex: { [key: string]: number } = {
+      monday: 0,
+      tuesday: 1,
+      wednesday: 2,
+      thursday: 3,
+      friday: 4,
+      saturday: 5,
+      sunday: 6,
+      mon: 0,
+      tue: 1,
+      wed: 2,
+      thu: 3,
+      fri: 4,
+      sat: 5,
+      sun: 6,
+    };
+
+    // Handle both array and object formats
+    let entries: any[] = [];
+    
+    if (Array.isArray(openingHours)) {
+      entries = openingHours;
+    } else if (typeof openingHours === 'object') {
+      // Convert object with numeric keys to array
+      entries = Object.values(openingHours);
+    } else {
+      return initialWorkingDays;
+    }
+
+    // Process each opening hour entry
+    entries.forEach((entry: any) => {
+      if (!entry || !entry.day || !entry.from || !entry.to) return;
+
+      const dayStr = entry.day.trim().toLowerCase();
+      const fromTime = convert24To12Hour(entry.from);
+      const toTime = convert24To12Hour(entry.to);
+
+      // Check if it's a range (e.g., "Monday - Friday")
+      if (dayStr.includes("-") || dayStr.includes("to")) {
+        const rangeMatch = dayStr.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s*[-to]+\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)/i);
+        if (rangeMatch) {
+          const startDay = rangeMatch[1].toLowerCase();
+          const endDay = rangeMatch[2].toLowerCase();
+          const startIndex = dayNameToIndex[startDay];
+          const endIndex = dayNameToIndex[endDay];
+
+          if (startIndex !== undefined && endIndex !== undefined) {
+            // Enable all days in the range
+            for (let i = startIndex; i <= endIndex; i++) {
+              initialWorkingDays[i] = {
+                enabled: true,
+                shifts: [{ start_time: fromTime, end_time: toTime }],
+              };
+            }
+          }
+        }
+      } else {
+        // Single day
+        const dayIndex = dayNameToIndex[dayStr];
+        if (dayIndex !== undefined) {
+          initialWorkingDays[dayIndex] = {
+            enabled: true,
+            shifts: [{ start_time: fromTime, end_time: toTime }],
+          };
+        }
+      }
+    });
+
+    return initialWorkingDays;
+  };
 
   // Fetch services from API
   const fetchServices = async () => {
+    if (!currentBranch?.id) return;
+    
     setIsLoadingServices(true);
     try {
-      const response = await axiosClient.get("/services/get");
+      const response = await axiosClient.get("/services/get", {
+        params: { branch_id: currentBranch.id },
+      });
       const servicesData = response.data?.data?.services || {};
       
       // Transform API response to match our format
@@ -1314,12 +1263,12 @@ function AddTeamMemberSidebar({
     return () => clearTimeout(timer);
   }, []);
 
-  // Fetch services when step 2 is accessed
+  // Fetch services when step 2 is accessed or when branch changes
   useEffect(() => {
-    if (currentStep === 2 && services.length === 0 && !isLoadingServices) {
+    if (currentStep === 2 && currentBranch?.id && services.length === 0 && !isLoadingServices) {
       fetchServices();
     }
-  }, [currentStep]);
+  }, [currentStep, currentBranch?.id]);
 
   // Initialize selected services when in edit mode and navigating to step 2
   useEffect(() => {
@@ -1362,6 +1311,176 @@ function AddTeamMemberSidebar({
       }
     }
   }, [currentStep, services, editStaff, isLoadingServices]);
+
+  // Helper function to get which days exist in branch opening_hours
+  const getBranchAvailableDays = (openingHours: any): Set<number> => {
+    const availableDays = new Set<number>();
+    
+    if (!openingHours) {
+      return availableDays;
+    }
+
+    const dayNameToIndex: { [key: string]: number } = {
+      monday: 0,
+      tuesday: 1,
+      wednesday: 2,
+      thursday: 3,
+      friday: 4,
+      saturday: 5,
+      sunday: 6,
+      mon: 0,
+      tue: 1,
+      wed: 2,
+      thu: 3,
+      fri: 4,
+      sat: 5,
+      sun: 6,
+    };
+
+    // Handle both array and object formats
+    let entries: any[] = [];
+    
+    if (Array.isArray(openingHours)) {
+      entries = openingHours;
+    } else if (typeof openingHours === 'object') {
+      // Convert object with numeric keys to array
+      entries = Object.values(openingHours);
+    } else {
+      return availableDays;
+    }
+
+    entries.forEach((entry: any) => {
+      if (!entry || !entry.day) return;
+
+      const dayStr = entry.day.trim().toLowerCase();
+
+      // Check if it's a range (e.g., "Monday - Friday")
+      if (dayStr.includes("-") || dayStr.includes("to")) {
+        const rangeMatch = dayStr.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s*[-to]+\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)/i);
+        if (rangeMatch) {
+          const startDay = rangeMatch[1].toLowerCase();
+          const endDay = rangeMatch[2].toLowerCase();
+          const startIndex = dayNameToIndex[startDay];
+          const endIndex = dayNameToIndex[endDay];
+
+          if (startIndex !== undefined && endIndex !== undefined) {
+            for (let i = startIndex; i <= endIndex; i++) {
+              availableDays.add(i);
+            }
+          }
+        }
+      } else {
+        // Single day
+        const dayIndex = dayNameToIndex[dayStr];
+        if (dayIndex !== undefined) {
+          availableDays.add(dayIndex);
+        }
+      }
+    });
+
+    return availableDays;
+  };
+
+  // Initialize working days from branch opening_hours when step 3 is accessed (for new staff only)
+  useEffect(() => {
+    const fetchBranchDetails = async (branchId: string | number) => {
+      try {
+        const response = await axiosClient.get("/branch/get", {
+          params: { branch_id: branchId },
+        });
+        
+        console.log("🔍 Branch API Response:", response.data);
+        
+        const branchData = response.data?.data?.branch || response.data?.branch || response.data?.data || response.data;
+        console.log("🔍 Branch Data:", branchData);
+        
+        const openingHours = branchData?.opening_hours;
+        console.log("🔍 Opening Hours:", openingHours);
+        console.log("🔍 Opening Hours Type:", typeof openingHours, "Is Array:", Array.isArray(openingHours), "Is Object:", typeof openingHours === 'object');
+        
+        // Check if opening_hours exists (can be array or object)
+        const hasOpeningHours = openingHours && (
+          (Array.isArray(openingHours) && openingHours.length > 0) ||
+          (typeof openingHours === 'object' && Object.keys(openingHours).length > 0)
+        );
+        
+        if (hasOpeningHours) {
+          console.log("🔍 Parsing opening hours...");
+          const parsedWorkingDays = parseOpeningHours(openingHours);
+          console.log("🔍 Parsed Working Days:", parsedWorkingDays);
+      setWorkingDays(parsedWorkingDays);
+          const availableDays = getBranchAvailableDays(openingHours);
+          console.log("🔍 Available Days:", Array.from(availableDays));
+          setBranchAvailableDays(availableDays);
+        } else {
+          console.warn("⚠️ No opening_hours found or empty array");
+          // If no opening_hours, allow all days to be enabled (user can set their own hours)
+          // Don't restrict based on branch hours if branch has no hours defined
+          setBranchAvailableDays(new Set([0, 1, 2, 3, 4, 5, 6])); // Allow all days
+          // Keep current workingDays state or initialize with defaults
+          if (Object.values(workingDays).every(day => !day.enabled && day.shifts.length === 0)) {
+            // Only reset if all days are disabled
+            setWorkingDays({
+              0: { enabled: false, shifts: [] },
+              1: { enabled: false, shifts: [] },
+              2: { enabled: false, shifts: [] },
+              3: { enabled: false, shifts: [] },
+              4: { enabled: false, shifts: [] },
+              5: { enabled: false, shifts: [] },
+              6: { enabled: false, shifts: [] },
+            });
+          }
+        }
+      } catch (error) {
+        console.error("❌ Error fetching branch details:", error);
+        // On error, allow all days (don't restrict if we can't fetch branch hours)
+        setBranchAvailableDays(new Set([0, 1, 2, 3, 4, 5, 6])); // Allow all days
+        // Keep current workingDays state
+        if (Object.values(workingDays).every(day => !day.enabled && day.shifts.length === 0)) {
+          // Only reset if all days are disabled
+          setWorkingDays({
+            0: { enabled: false, shifts: [] },
+            1: { enabled: false, shifts: [] },
+            2: { enabled: false, shifts: [] },
+            3: { enabled: false, shifts: [] },
+            4: { enabled: false, shifts: [] },
+            5: { enabled: false, shifts: [] },
+            6: { enabled: false, shifts: [] },
+          });
+        }
+      }
+    };
+
+    if (currentStep === 3 && !editStaff) {
+      // Get the branch selected in step 1, not the global currentBranch
+      const selectedBranchId = personalInfo.branch;
+      
+      if (selectedBranchId) {
+        // Fetch branch details from API
+        fetchBranchDetails(selectedBranchId);
+      } else {
+        // If no branch selected, allow all days
+        setBranchAvailableDays(new Set([0, 1, 2, 3, 4, 5, 6])); // Allow all days
+        // Keep current workingDays state
+        if (Object.values(workingDays).every(day => !day.enabled && day.shifts.length === 0)) {
+          // Only reset if all days are disabled
+          setWorkingDays({
+            0: { enabled: false, shifts: [] },
+            1: { enabled: false, shifts: [] },
+            2: { enabled: false, shifts: [] },
+            3: { enabled: false, shifts: [] },
+            4: { enabled: false, shifts: [] },
+            5: { enabled: false, shifts: [] },
+            6: { enabled: false, shifts: [] },
+          });
+        }
+      }
+    } else if (!editStaff && personalInfo.branch) {
+      // Also update branchAvailableDays when branch selection changes (even if not on step 3 yet)
+      const selectedBranchId = personalInfo.branch;
+      fetchBranchDetails(selectedBranchId);
+    }
+  }, [currentStep, personalInfo.branch, editStaff]);
 
   // Initialize intl-tel-input
   useEffect(() => {
@@ -1480,10 +1599,11 @@ function AddTeamMemberSidebar({
           services_ids: selectedServices,
         });
       } else if (step === 3) {
-        // Save working hours
+        // Save working hours - format with day names and 24-hour time format
+        const formattedWorkingHours = formatWorkingHoursForAPI(workingDays);
         await axiosClient.post(`/staff/edit/hours`, {
           staff_id: editStaff.id,
-          working_hours: workingDays,
+          working_hours: formattedWorkingHours,
         });
       }
     } catch (error: any) {
@@ -1560,19 +1680,82 @@ function AddTeamMemberSidebar({
     }));
   };
 
+  // Helper functions to convert between 12-hour format (with am/pm) and 24-hour format (for time input)
+  const convertTo24Hour = (time12h: string): string => {
+    if (!time12h) return "10:00";
+    
+    // Remove all spaces and convert to lowercase
+    const time = time12h.trim().replace(/\s+/g, '').toLowerCase();
+    
+    // Check if already in 24-hour format (HH:MM)
+    if (/^\d{1,2}:\d{2}$/.test(time)) {
+      return time;
+    }
+    
+    const match = time.match(/^(\d{1,2}):(\d{2})(am|pm)$/);
+    
+    if (!match) {
+      // Try format without colon
+      const match2 = time.match(/^(\d{1,2})\s*(am|pm)$/);
+      if (match2) {
+        let hours = parseInt(match2[1], 10);
+        const period = match2[2];
+        if (period === "pm" && hours !== 12) hours += 12;
+        if (period === "am" && hours === 12) hours = 0;
+        return `${hours.toString().padStart(2, "0")}:00`;
+      }
+      return "10:00";
+    }
+    
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = match[3];
+    
+    if (period === "pm" && hours !== 12) hours += 12;
+    if (period === "am" && hours === 12) hours = 0;
+    
+    return `${hours.toString().padStart(2, "0")}:${minutes}`;
+  };
+
+  const convertTo12Hour = (time24h: string): string => {
+    if (!time24h) return "10:00 am";
+    
+    const [hoursStr, minutesStr] = time24h.split(":");
+    const hours = parseInt(hoursStr, 10);
+    const minutes = minutesStr || "00";
+    
+    if (isNaN(hours)) return "10:00 am";
+    
+    const period = hours >= 12 ? "pm" : "am";
+    const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+    
+    return `${displayHours.toString().padStart(2, "0")}:${minutes} ${period}`;
+  };
+
   const updateShift = (dayIndex: number, shiftIndex: number, field: "start_time" | "end_time", value: string) => {
+    // Convert from 24-hour format (from time input) to 12-hour format (stored format)
+    const time12h = convertTo12Hour(value);
+    
     setWorkingDays(prev => ({
       ...prev,
       [dayIndex]: {
         ...prev[dayIndex],
         shifts: prev[dayIndex].shifts.map((shift, i) =>
-          i === shiftIndex ? { ...shift, [field]: value } : shift
+          i === shiftIndex ? { ...shift, [field]: time12h } : shift
         ),
       },
     }));
   };
 
   const toggleDay = (dayIndex: number) => {
+    // Don't allow toggling days that don't exist in branch opening_hours (for new staff)
+    // If branchAvailableDays is null, we haven't fetched yet, so allow toggling
+    // If it's an empty Set, no days are available, so don't allow
+    // If it has values, only allow those days
+    if (!editStaff && branchAvailableDays !== null && !branchAvailableDays.has(dayIndex)) {
+      return;
+    }
+
     setWorkingDays(prev => {
       const newEnabled = !prev[dayIndex].enabled;
       return {
@@ -1588,16 +1771,6 @@ function AddTeamMemberSidebar({
     });
   };
 
-  const timeSlots = [
-    "10:00 am", "10:15 am", "10:30 am", "10:45 am",
-    "11:00 am", "11:15 am", "11:30 am", "11:45 am",
-    "12:00 pm", "12:15 pm", "12:30 pm", "12:45 pm",
-    "01:00 pm", "01:15 pm", "01:30 pm", "01:45 pm",
-    "02:00 pm", "02:15 pm", "02:30 pm", "02:45 pm",
-    "03:00 pm", "03:15 pm", "03:30 pm", "03:45 pm",
-    "04:00 pm", "04:15 pm", "04:30 pm", "04:45 pm",
-    "05:00 pm", "06:00 pm"
-  ];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -1639,9 +1812,9 @@ function AddTeamMemberSidebar({
 
         {/* Progress Steps */}
         <div className="px-6 pt-4">
-          <div className="flex items-center gap-3.5 text-xs">
+          <div className="flex items-center gap-2 text-xs">
             {steps.map((step, index) => (
-              <div key={step} className="flex items-center gap-3.5">
+              <div key={step} className="flex items-center gap-2">
                 <button
                   onClick={() => {
                     if (editStaff) {
@@ -1670,7 +1843,7 @@ function AddTeamMemberSidebar({
 
         {/* Step Content */}
         <div className="p-6 pt-3">
-          {/* Step 1: Personal Info */}
+              {/* Step 1: Personal Info */}
           {currentStep === 1 && (
             <div>
               <h3 className="text-base font-bold text-black mb-8">Enter Team Member Details</h3>
@@ -1785,9 +1958,17 @@ function AddTeamMemberSidebar({
                     type="text"
                     placeholder="First Name"
                     value={personalInfo.firstName}
-                    onChange={(e) => setPersonalInfo({ ...personalInfo, firstName: e.target.value })}
+                    onChange={(e) => {
+                      setPersonalInfo({ ...personalInfo, firstName: e.target.value });
+                      if (fieldErrors.first_name) {
+                        setFieldErrors(prev => ({ ...prev, first_name: "" }));
+                      }
+                    }}
                     className="main-input"
                   />
+                  {fieldErrors.first_name && (
+                    <p className="mt-1 text-xs text-red-500">{fieldErrors.first_name}</p>
+                  )}
                 </div>
 
                 {/* Last Name */}
@@ -1799,9 +1980,17 @@ function AddTeamMemberSidebar({
                     type="text"
                     placeholder="Last Name"
                     value={personalInfo.lastName}
-                    onChange={(e) => setPersonalInfo({ ...personalInfo, lastName: e.target.value })}
+                    onChange={(e) => {
+                      setPersonalInfo({ ...personalInfo, lastName: e.target.value });
+                      if (fieldErrors.last_name) {
+                        setFieldErrors(prev => ({ ...prev, last_name: "" }));
+                      }
+                    }}
                     className="main-input"
                   />
+                  {fieldErrors.last_name && (
+                    <p className="mt-1 text-xs text-red-500">{fieldErrors.last_name}</p>
+                  )}
                 </div>
 
                 {/* Email */}
@@ -1813,9 +2002,17 @@ function AddTeamMemberSidebar({
                     type="email"
                     placeholder="Email Address"
                     value={personalInfo.email}
-                    onChange={(e) => setPersonalInfo({ ...personalInfo, email: e.target.value })}
+                    onChange={(e) => {
+                      setPersonalInfo({ ...personalInfo, email: e.target.value });
+                      if (fieldErrors.email) {
+                        setFieldErrors(prev => ({ ...prev, email: "" }));
+                      }
+                    }}
                     className="main-input"
                   />
+                  {fieldErrors.email && (
+                    <p className="mt-1 text-xs text-red-500">{fieldErrors.email}</p>
+                  )}
                 </div>
 
                 {/* Phone Number */}
@@ -1828,9 +2025,95 @@ function AddTeamMemberSidebar({
                     type="tel"
                     placeholder="X XXX XXX"
                     value={personalInfo.phone}
-                    onChange={(e) => setPersonalInfo({ ...personalInfo, phone: e.target.value })}
+                    onChange={(e) => {
+                      setPersonalInfo({ ...personalInfo, phone: e.target.value });
+                      if (fieldErrors.phone_number) {
+                        setFieldErrors(prev => ({ ...prev, phone_number: "" }));
+                      }
+                    }}
                     className="main-input"
                   />
+                  {fieldErrors.phone_number && (
+                    <p className="mt-1 text-xs text-red-500">{fieldErrors.phone_number}</p>
+                  )}
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className="main-label black">
+                    Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Password"
+                      value={personalInfo.password}
+                      onChange={(e) => {
+                        setPersonalInfo({ ...personalInfo, password: e.target.value });
+                        if (fieldErrors.password) {
+                          setFieldErrors(prev => ({ ...prev, password: "" }));
+                        }
+                      }}
+                      className="main-input pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPassword ? (
+                        <EyeSlashIcon className="h-5 w-5" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Password Confirmation */}
+                <div>
+                  <label className="main-label black">
+                    Confirm Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPasswordConfirmation ? "text" : "password"}
+                      placeholder="Confirm Password"
+                      value={personalInfo.passwordConfirmation}
+                      onChange={(e) => {
+                        setPersonalInfo({ ...personalInfo, passwordConfirmation: e.target.value });
+                        if (fieldErrors.password_confirmation) {
+                          setFieldErrors(prev => ({ ...prev, password_confirmation: "" }));
+                        }
+                      }}
+                      className={`main-input pr-10 ${
+                        personalInfo.passwordConfirmation && 
+                        personalInfo.password !== personalInfo.passwordConfirmation 
+                          ? "border-red-500 focus:border-red-500 focus:ring-red-500" 
+                          : ""
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordConfirmation(!showPasswordConfirmation)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPasswordConfirmation ? (
+                        <EyeSlashIcon className="h-5 w-5" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                  {personalInfo.passwordConfirmation && 
+                   personalInfo.password !== personalInfo.passwordConfirmation && (
+                    <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                  )}
+                  {personalInfo.passwordConfirmation && 
+                   personalInfo.password === personalInfo.passwordConfirmation && 
+                   personalInfo.password.length > 0 && (
+                    <p className="text-xs text-green-500 mt-1">Passwords match</p>
+                  )}
                 </div>
 
                 {/* Job Title */}
@@ -1842,9 +2125,17 @@ function AddTeamMemberSidebar({
                     type="text"
                     placeholder="Job Title"
                     value={personalInfo.jobTitle}
-                    onChange={(e) => setPersonalInfo({ ...personalInfo, jobTitle: e.target.value })}
+                    onChange={(e) => {
+                      setPersonalInfo({ ...personalInfo, jobTitle: e.target.value });
+                      if (fieldErrors.job_title) {
+                        setFieldErrors(prev => ({ ...prev, job_title: "" }));
+                      }
+                    }}
                     className="main-input"
                   />
+                  {fieldErrors.job_title && (
+                    <p className="mt-1 text-xs text-red-500">{fieldErrors.job_title}</p>
+                  )}
                 </div>
 
                 {/* Branch */}
@@ -1862,10 +2153,14 @@ function AddTeamMemberSidebar({
                         const updatedInfo = { ...personalInfo, branch: selectedValue };
                         console.log("🔍 Updated personalInfo.branch:", updatedInfo.branch);
                         setPersonalInfo(updatedInfo);
-                        // Verify the update
-                        setTimeout(() => {
-                          console.log("🔍 personalInfo.branch after state update:", personalInfo.branch);
-                        }, 100);
+                        if (fieldErrors.selected_branch_id || fieldErrors.branch_id || fieldErrors.branch) {
+                          setFieldErrors(prev => ({
+                            ...prev,
+                            selected_branch_id: "",
+                            branch_id: "",
+                            branch: "",
+                          }));
+                        }
                       }}
                       className="main-input-select appearance-none pr-10"
                     >
@@ -1883,6 +2178,11 @@ function AddTeamMemberSidebar({
                       <Arrow direction="down" opacity={1} className="w-4 h-4" />
                     </div>
                   </div>
+                  {(fieldErrors.selected_branch_id || fieldErrors.branch_id || fieldErrors.branch) && (
+                    <p className="mt-1 text-xs text-red-500">
+                      {fieldErrors.selected_branch_id || fieldErrors.branch_id || fieldErrors.branch}
+                    </p>
+                  )}
                 </div>
 
                 {/* Calendar Color */}
@@ -2032,17 +2332,37 @@ function AddTeamMemberSidebar({
             <div>
               <h3 className="text-base font-bold text-black mb-8">Working Days & Hours</h3>
               
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {dayNames.map((dayName, dayIndex) => {
                   const day = workingDays[dayIndex];
                   return (
                     <div key={dayIndex} className="flex items-start gap-3">
                       {/* Toggle Switch - smaller */}
+                      {(() => {
+                        // Check if day exists in branch opening_hours (for new staff only)
+                        // In edit mode, allow all days. In add mode:
+                        // - If branchAvailableDays is null (not fetched yet), allow all days
+                        // - If branchAvailableDays is empty Set, disable all days
+                        // - If branchAvailableDays has values, only allow those days
+                        const isDayInBranchHours = editStaff || 
+                          branchAvailableDays === null || 
+                          (branchAvailableDays !== null && branchAvailableDays.has(dayIndex));
+                        const isToggleDisabled = !editStaff && 
+                          branchAvailableDays !== null && 
+                          !branchAvailableDays.has(dayIndex);
+                        
+                        // Debug log on first render
+                        if (dayIndex === 0 && currentStep === 3) {
+                          console.log("🔍 Day 0 - enabled:", day.enabled, "isDayInBranchHours:", isDayInBranchHours, "branchAvailableDays:", branchAvailableDays ? Array.from(branchAvailableDays) : "null");
+                        }
+                        
+                        return (
                       <button
                         onClick={() => toggleDay(dayIndex)}
-                        className={`relative w-10 h-5 mt-[10px] rounded-full transition-colors flex-shrink-0 ${
+                            disabled={isToggleDisabled}
+                            className={`relative w-10 h-5 ${day.enabled ? "mt-[10px]" : ""} rounded-full transition-colors flex-shrink-0 ${
                           day.enabled ? "bg-primary" : "bg-gray-300"
-                        }`}
+                            } ${isToggleDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       >
                         <span
                           className={`absolute top-0.5  left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
@@ -2050,15 +2370,16 @@ function AddTeamMemberSidebar({
                           }`}
                         />
                       </button>
+                        );
+                      })()}
                       
                       {/* Day Name */}
-                      <span className="text-[13px] block mt-[10px] font-semibold text-black w-12 flex-shrink-0">{dayName}</span>
+                      <span className={`text-[13px] block ${day.enabled ? "mt-[10px]" : ""} font-semibold text-black w-12 flex-shrink-0`}>{dayName}</span>
 
                       {day.enabled ? (
-                        <div className="flex-1 flex flex-col gap-2">
+                        <div className="flex-1 flex flex-col gap-2 relative">
                           {/* Add button always at the top */}
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 flex-1"></div>
+                          <div className="flex items-center gap-2 absolute top-[3px] right-0">
                             <button
                               onClick={() => addShift(dayIndex)}
                               className="flex-shrink-0"
@@ -2075,32 +2396,20 @@ function AddTeamMemberSidebar({
                             <div key={shiftIndex} className="flex items-center gap-2">
                               <div className="flex items-center gap-2 flex-1">
                                 <div className="relative flex-1">
-                                  <svg className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  <select
-                                    value={shift.start_time}
+                                  <input
+                                    type="time"
+                                    value={convertTo24Hour(shift.start_time)}
                                     onChange={(e) => updateShift(dayIndex, shiftIndex, "start_time", e.target.value)}
                                     className="w-full pl-2 pr-8 py-1.5 border border-black/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary appearance-none bg-white text-[11px] main-input"
-                                  >
-                                    {timeSlots.map((time) => (
-                                      <option key={time} value={time}>{time}</option>
-                                    ))}
-                                  </select>
+                                  />
                                 </div>
                                 <div className="relative flex-1">
-                                  <svg className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  <select
-                                    value={shift.end_time}
+                                  <input
+                                    type="time"
+                                    value={convertTo24Hour(shift.end_time)}
                                     onChange={(e) => updateShift(dayIndex, shiftIndex, "end_time", e.target.value)}
                                     className="w-full pl-2 pr-8 py-1.5 border border-black/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary appearance-none bg-white text-[11px] main-input"
-                                  >
-                                    {timeSlots.map((time) => (
-                                      <option key={time} value={time}>{time}</option>
-                                    ))}
-                                  </select>
+                                  />
                                 </div>
                               </div>
                               <button
@@ -2115,7 +2424,7 @@ function AddTeamMemberSidebar({
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-gray-500">Unavailable</p>
+                        <p className="text-xs text-gray-500 block">Unavailable</p>
                       )}
                     </div>
                   );
@@ -2184,12 +2493,144 @@ function AddTeamMemberSidebar({
                 <Button
                   variant="primary"
                   onClick={async () => {
+                    // Clear previous field errors before final submit
+                    setFieldErrors({});
                     if (editStaff) {
                       // Save final step (hours)
                       await handleSaveStep(3);
                     } else {
-                      // Save team member (add mode)
+                      // Add new team member - call /staff/add API with all data
+                      try {
+                        // Validation
+                        if (!personalInfo.firstName || !personalInfo.lastName || !personalInfo.email || !personalInfo.phone || !personalInfo.password || !personalInfo.passwordConfirmation || !personalInfo.jobTitle || !personalInfo.branch) {
+                          alert("Please fill in all required fields");
+                          return;
+                        }
+                        
+                        // Validate password confirmation - must be identical
+                        if (personalInfo.password !== personalInfo.passwordConfirmation) {
+                          alert("Password and password confirmation must be identical");
+                          return;
+                        }
+                        
+                        if (!personalInfo.password || personalInfo.password.trim() === "") {
+                          alert("Password is required");
+                          return;
+                        }
+                        
+                        if (!personalInfo.passwordConfirmation || personalInfo.passwordConfirmation.trim() === "") {
+                          alert("Password confirmation is required");
+                          return;
+                        }
+
+                        const phoneNumber = `${personalInfo.countryCode} ${personalInfo.phone}`;
+                        
+                        // Prepare FormData if profile image exists, otherwise use JSON
+                        if (personalInfo.profilePhoto) {
+                          const formData = new FormData();
+                          formData.append('first_name', personalInfo.firstName);
+                          formData.append('last_name', personalInfo.lastName);
+                          formData.append('email', personalInfo.email);
+                          formData.append('phone_number', phoneNumber);
+                          if (personalInfo.password) {
+                            formData.append('password', personalInfo.password);
+                            formData.append('password_confirmation', personalInfo.passwordConfirmation);
+                          }
+                          formData.append('job_title', personalInfo.jobTitle);
+                          formData.append('branch_id', String(Number(currentBranch?.id))); // Current branch (website level)
+                          formData.append('selected_branch_id', String(Number(personalInfo.branch))); // Selected branch from form
+                          formData.append('calendar_color', personalInfo.calendarColor);
+                          formData.append('profile_image', personalInfo.profilePhoto);
+                          
+                          // Append services_ids as array (FormData handles arrays)
+                          selectedServices.forEach((serviceId) => {
+                            formData.append('services_ids[]', serviceId);
+                          });
+                          
+                          // Format working hours with day names and 24-hour time format
+                          const formattedWorkingHours = formatWorkingHoursForAPI(workingDays);
+                          formData.append('working_hours', JSON.stringify(formattedWorkingHours));
+                          
+                          await axiosClient.post('/staff/add', formData);
+                        } else {
+                          // Format working hours with day names and 24-hour time format
+                          const formattedWorkingHours = formatWorkingHoursForAPI(workingDays);
+                          
+                          const requestData = {
+                            first_name: personalInfo.firstName,
+                            last_name: personalInfo.lastName,
+                            email: personalInfo.email,
+                            phone_number: phoneNumber,
+                            ...(personalInfo.password && { 
+                              password: personalInfo.password,
+                              password_confirmation: personalInfo.passwordConfirmation 
+                            }),
+                            job_title: personalInfo.jobTitle,
+                            branch_id: Number(currentBranch?.id), // Current branch (website level)
+                            selected_branch_id: Number(personalInfo.branch), // Selected branch from form
+                            calendar_color: personalInfo.calendarColor,
+                            services_ids: selectedServices,
+                            working_hours: formattedWorkingHours,
+                          };
+                          
+                          console.log("🔍 Adding staff with data:", requestData);
+                          await axiosClient.post('/staff/add', requestData);
+                        }
+                        
+                        // Refresh staff list and close sidebar after successful addition
+                        // onSave() already calls fetchStaffMembers() - see line 581-584
                       onSave();
+                      } catch (error: any) {
+                        console.error("Error adding staff member:", error);
+                        console.error("Error response:", error?.response?.data);
+
+                        const validation =
+                          error?.response?.data?.validation_errors ||
+                          error?.response?.data?.errors;
+
+                        if (validation && typeof validation === "object") {
+                          const newErrors: { [key: string]: string } = {};
+                          Object.entries(validation).forEach(([field, messages]) => {
+                            const msg = Array.isArray(messages)
+                              ? String(messages[0])
+                              : String(messages);
+                            newErrors[field] = msg;
+                          });
+
+                          setFieldErrors(newErrors);
+
+                          const step1Fields = [
+                            "first_name",
+                            "last_name",
+                            "email",
+                            "phone_number",
+                            "password",
+                            "password_confirmation",
+                            "job_title",
+                            "branch",
+                            "branch_id",
+                            "selected_branch_id",
+                          ];
+                          const step2Fields = ["services_ids", "services", "service_ids"];
+                          const step3Fields = ["working_hours"];
+
+                          const errorFields = Object.keys(newErrors);
+                          if (errorFields.some((f) => step1Fields.includes(f))) {
+                            setCurrentStep(1);
+                          } else if (errorFields.some((f) => step2Fields.includes(f))) {
+                            setCurrentStep(2);
+                          } else if (errorFields.some((f) => step3Fields.includes(f))) {
+                            setCurrentStep(3);
+                          }
+                        } else {
+                          const errorMessage =
+                            error?.response?.data?.message ||
+                            error?.response?.data?.error ||
+                            error?.message ||
+                            "Failed to add staff member. Please try again.";
+                          alert(errorMessage);
+                        }
+                      }
                     }
                   }}
                   className="w-[70%] ml-4"
@@ -2285,9 +2726,13 @@ function EditServicesSidebar({
   }, [services, staff.assignedServices, staff.assignedServiceIds, isLoadingServices]);
 
   const fetchServices = async () => {
+    if (!currentBranch?.id) return;
+    
     setIsLoadingServices(true);
     try {
-      const response = await axiosClient.get("/services/get");
+      const response = await axiosClient.get("/services/get", {
+        params: { branch_id: currentBranch.id },
+      });
       const servicesData = response.data?.data?.services || {};
       
       const transformedServices: Array<{ id: string; name: string; category: string }> = [];

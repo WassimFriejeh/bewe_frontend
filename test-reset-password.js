@@ -2,7 +2,7 @@
 const axios = require('axios');
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://bewe_api.test/api/v1";
-const API_KEY = process.env.NEXT_PUBLIC_API_SECRET_KEY || "super-secret-api-key-123";
+const API_KEY = process.env.NEXT_PUBLIC_API_SECRET_KEY || "^Ft*;.bS3+P9Pkr$&#mj=QF&@<y_hZ368Y£ky";
 
 const axiosClient = axios.create({
   baseURL: API_URL,

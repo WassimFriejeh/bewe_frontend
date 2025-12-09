@@ -59,7 +59,7 @@ export default function Sidebar() {
     setUser(userData);
   }, [branchChangeKey]);
 
-  console.log('user permissions' + userPermissions);
+  // console.log('user permissions' + userPermissions);
 
   const filteredMenuItems = menuItems.filter(item => {
     // Calendar is accessible to all

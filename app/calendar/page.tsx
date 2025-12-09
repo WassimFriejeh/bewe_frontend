@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useBranch } from "../../contexts/BranchContext";
 import { hasPermission, getUserPermissions } from "../../utils/permissions";
 import axiosClient from "../../libs/axiosClient";
@@ -10,6 +10,8 @@ import SearchInput from "../../components/ui/SearchInput";
 import Arrow from "../../components/ui/Arrow";
 import EditIcon from "../../components/Icons/EditIcon";
 import DeleteIcon from "../../components/Icons/DeleteIcon";
+import intlTelInput from "intl-tel-input";
+import "intl-tel-input/build/css/intlTelInput.css";
 
 interface Booking {
   id: string;
@@ -54,10 +56,39 @@ interface PendingBooking {
   [key: string]: any; // Allow additional properties from API
 }
 
+interface StaffMember {
+  id: string;
+  name: string;
+  avatar?: string;
+  calendarColor?: string;
+}
+
 export default function Calendar() {
   const { currentBranch, branchChangeKey, permissions: contextPermissions } = useBranch();
-  const [view, setView] = useState<"calendar" | "list">("list");
+  
+  // Initialize view from localStorage or default to "list"
+  const [view, setView] = useState<"calendar" | "list">(() => {
+    if (typeof window !== "undefined") {
+      const savedView = localStorage.getItem("calendar-view") as "calendar" | "list" | null;
+      return savedView || "list";
+    }
+    return "list";
+  });
+  
+  // Initialize calendarView from localStorage or default to "day"
+  const [calendarView, setCalendarView] = useState<"day" | "week" | "month">(() => {
+    if (typeof window !== "undefined") {
+      const savedCalendarView = localStorage.getItem("calendar-view-type") as "day" | "week" | "month" | null;
+      return savedCalendarView || "day";
+    }
+    return "day";
+  });
+  
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [staffScrollIndex, setStaffScrollIndex] = useState(0); // Index for scrolling through staff
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [allBookings, setAllBookings] = useState<Booking[]>([]); // All bookings for calendar (no pagination)
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [pendingBookings, setPendingBookings] = useState<PendingBooking[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [isEditSidebarOpen, setIsEditSidebarOpen] = useState(false);
@@ -74,6 +105,8 @@ export default function Calendar() {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [isBookingSidebarOpen, setIsBookingSidebarOpen] = useState(false);
+  const [showSuccessNotification, setShowSuccessNotification] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Use permissions from context (they update automatically when branch changes)
   const canAddBooking = contextPermissions.includes("Add Booking");
@@ -92,8 +125,32 @@ export default function Calendar() {
       }
       fetchBookings();
       fetchPendingBookings();
+      fetchStaffMembers();
+      if (view === "calendar") {
+        fetchAllBookingsForCalendar();
+      }
     }
-  }, [currentBranch?.id, branchChangeKey, filters, currentPage, canViewAllBookings]);
+  }, [currentBranch?.id, branchChangeKey, filters, currentPage, canViewAllBookings, view]);
+
+  useEffect(() => {
+    if (view === "calendar" && currentBranch) {
+      fetchAllBookingsForCalendar();
+    }
+  }, [currentDate, calendarView, currentBranch?.id, filters.team, filters.status]);
+
+  // Persist view state to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("calendar-view", view);
+    }
+  }, [view]);
+
+  // Persist calendarView state to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("calendar-view-type", calendarView);
+    }
+  }, [calendarView]);
 
   const fetchBookings = async () => {
     if (!currentBranch) return;
@@ -171,6 +228,111 @@ export default function Calendar() {
     }
   };
 
+  const fetchStaffMembers = async () => {
+    if (!currentBranch) return;
+
+    try {
+      const response = await axiosClient.get("/staff/get", {
+        params: { branch_id: currentBranch.id },
+      });
+      
+      const staffData = response.data?.data?.staff || [];
+      
+      const transformedData = staffData.map((member: any) => {
+        const firstName = member.first_name || "";
+        const lastName = member.last_name || "";
+        const fullName = `${firstName} ${lastName}`.trim() || "Staff Member";
+        
+        const avatarUrl = (member.image?.image && member.image.image.trim() !== "")
+          ? member.image.image
+          : null;
+        
+        return {
+          id: String(member.id),
+          name: fullName,
+          avatar: avatarUrl,
+          calendarColor: member.calendar_color || "#9CA3AF",
+        };
+      });
+
+      setStaffMembers(transformedData);
+      // Reset scroll index when staff members change
+      setStaffScrollIndex(0);
+    } catch (error) {
+      console.error("Error fetching staff members:", error);
+      setStaffMembers([]);
+      setStaffScrollIndex(0);
+    }
+  };
+
+  const fetchAllBookingsForCalendar = async () => {
+    if (!currentBranch) return;
+
+    try {
+      let dates: Date[] = [];
+      
+      if (calendarView === "day") {
+        dates = [new Date(currentDate)];
+      } else if (calendarView === "week") {
+        // Get all 7 days of the week
+        const dayOfWeek = currentDate.getDay();
+        const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Monday as first day
+        const weekStart = new Date(currentDate);
+        weekStart.setDate(diff);
+        
+        for (let i = 0; i < 7; i++) {
+          const day = new Date(weekStart);
+          day.setDate(weekStart.getDate() + i);
+          dates.push(day);
+        }
+      } else { // month
+        // Get all days in the month
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        for (let i = 1; i <= daysInMonth; i++) {
+          dates.push(new Date(year, month, i));
+        }
+      }
+
+      // Make parallel API calls for each date
+      const promises = dates.map(date => {
+        const params: any = {
+          branch_id: currentBranch.id,
+          date: date.toISOString().split("T")[0], // YYYY-MM-DD format
+        };
+
+        if (filters.team !== "all") {
+          params.team_member = filters.team;
+        }
+
+        if (filters.status !== "all") {
+          params.status = filters.status.toLowerCase();
+        }
+
+        return axiosClient.get("/bookings/get/by/day", { params })
+          .then(response => {
+            const data = response.data.data || response.data;
+            return data.bookings || data || [];
+          })
+          .catch(error => {
+            console.error(`Error fetching bookings for ${params.date}:`, error);
+            return [];
+          });
+      });
+
+      // Wait for all requests to complete and aggregate results
+      const results = await Promise.all(promises);
+      const allBookingsData = results.flat();
+      
+      setAllBookings(allBookingsData);
+    } catch (error) {
+      console.error("Error fetching calendar bookings:", error);
+      setAllBookings([]);
+    }
+  };
+
   const handleApproveBooking = async (bookingId: string) => {
     if (!canEditBooking) return;
 
@@ -202,7 +364,7 @@ export default function Calendar() {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColorForList = (status: string) => {
     switch (status) {
       case "Pending":
         return "bg-yellow-100 text-yellow-800";
@@ -229,6 +391,187 @@ export default function Calendar() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  // Calendar helper functions
+  const formatDateForHeader = (date: Date, view: "day" | "week" | "month") => {
+    if (view === "day") {
+      return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+    } else if (view === "week") {
+      const dateCopy = new Date(date);
+      const dayOfWeek = dateCopy.getDay();
+      const diff = dateCopy.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const startOfWeek = new Date(dateCopy);
+      startOfWeek.setDate(diff);
+      
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      
+      return `${startOfWeek.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} - ${endOfWeek.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, ${startOfWeek.getFullYear()}`;
+    } else {
+      return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    }
+  };
+
+  const navigateDate = (direction: "prev" | "next" | "today") => {
+    const newDate = new Date(currentDate);
+    
+    if (direction === "today") {
+      setCurrentDate(new Date());
+      return;
+    }
+    
+    if (calendarView === "day") {
+      newDate.setDate(newDate.getDate() + (direction === "next" ? 1 : -1));
+    } else       if (calendarView === "week") {
+        newDate.setDate(newDate.getDate() + (direction === "next" ? 7 : -7));
+      } else if (calendarView === "month") {
+      newDate.setMonth(newDate.getMonth() + (direction === "next" ? 1 : -1));
+    }
+    
+    setCurrentDate(newDate);
+  };
+
+  const getTimeSlots = () => {
+    const slots = [];
+    // Generate slots every 1.5 hours (90 minutes) from 8:00 AM to 8:00 PM
+    for (let hour = 8; hour <= 20; hour += 1.5) {
+      const h = Math.floor(hour);
+      const m = (hour % 1) * 60;
+      const date = new Date();
+      date.setHours(h, m, 0, 0);
+      
+      // Format as 12-hour with AM/PM
+      const timeString = date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: m === 0 ? undefined : "2-digit",
+        hour12: true,
+      });
+      
+      slots.push({
+        display: timeString,
+        hour: h,
+        minute: m,
+        totalMinutes: h * 60 + m,
+      });
+    }
+    return slots;
+  };
+
+  const formatTime12Hour = (date: Date) => {
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const getWeekDays = () => {
+    const date = new Date(currentDate);
+    const dayOfWeek = date.getDay();
+    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const startOfWeek = new Date(date);
+    startOfWeek.setDate(diff);
+    
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(startOfWeek);
+      day.setDate(startOfWeek.getDate() + i);
+      days.push(day);
+    }
+    return days;
+  };
+
+  const getMonthDays = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    // Adjust to Monday as first day (0 = Sunday, so we shift)
+    const adjustedStart = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
+    
+    const days = [];
+    
+    // Add previous month's trailing days
+    const prevMonth = new Date(year, month, 0);
+    const prevMonthDays = prevMonth.getDate();
+    for (let i = adjustedStart - 1; i >= 0; i--) {
+      days.push(new Date(year, month - 1, prevMonthDays - i));
+    }
+    
+    // Add current month's days
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i));
+    }
+    
+    // Add next month's leading days to fill the grid
+    const remaining = 42 - days.length; // 6 weeks * 7 days
+    for (let i = 1; i <= remaining; i++) {
+      days.push(new Date(year, month + 1, i));
+    }
+    
+    return days;
+  };
+
+  const getBookingsForSlot = (date: Date, staffId?: string) => {
+    const dateStr = date.toISOString().split("T")[0];
+    return allBookings.filter(booking => {
+      const bookingDate = new Date(booking.scheduledOn);
+      const bookingDateStr = bookingDate.toISOString().split("T")[0];
+      const matchesDate = bookingDateStr === dateStr;
+      const matchesStaff = !staffId || booking.staff.id === staffId;
+      return matchesDate && matchesStaff;
+    });
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "completed":
+      case "confirmed":
+        return (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13.3333 4L6 11.3333L2.66667 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        );
+      case "started":
+        return (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 2.66667L10.6667 6H13.3333L10.6667 9.33333L8 13.3333L5.33333 9.33333L2.66667 6H5.33333L8 2.66667Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        );
+      case "pending":
+        return (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2"/>
+            <path d="M8 5V8L10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        );
+      default:
+        return (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="2"/>
+          </svg>
+        );
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "completed":
+      case "confirmed":
+        return "bg-purple-100 text-purple-700 border-purple-200";
+      case "started":
+        return "bg-yellow-100 text-yellow-700 border-yellow-200";
+      case "pending":
+        return "bg-blue-100 text-blue-700 border-blue-200";
+      case "cancelled":
+        return "bg-red-100 text-red-700 border-red-200";
+      default:
+        return "bg-gray-100 text-gray-700 border-gray-200";
+    }
   };
 
   return (
@@ -369,7 +712,11 @@ export default function Calendar() {
                     className="px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="all">All Team</option>
-                    {/* Add team options dynamically */}
+                    {staffMembers.map((staff) => (
+                      <option key={staff.id} value={staff.id}>
+                        {staff.name}
+                      </option>
+                    ))}
                   </select>
                   <select
                     value={filters.status}
@@ -511,7 +858,7 @@ export default function Calendar() {
                             <td className="px-4 py-4 text-sm text-gray-600">{booking.duration} min</td>
                             <td className="px-4 py-4 text-sm text-gray-600">{booking.payment}</td>
                             <td className="px-4 py-4">
-                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(booking.status)}`}>
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColorForList(booking.status)}`}>
                                 {booking.status}
                               </span>
                             </td>
@@ -546,8 +893,446 @@ export default function Calendar() {
               </div>
             </>
           ) : (
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <p className="text-gray-600">Calendar view will be implemented later</p>
+            <div className="">
+              {/* Calendar Header - No white background */}
+              <div className=" py-2">
+                <div className="flex items-center justify-between mb-4">
+                  {/* Date Navigation, Today, and Filters */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => navigateDate("prev")}
+                      className="p-2 border border-black/20 rounded-[5px] bg-white hover:bg-black transition-colors group"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-black group-hover:stroke-white"/>
+                      </svg>
+                    </button>
+                    <h2 className="text-lg font-bold">
+                      {formatDateForHeader(currentDate, calendarView)}
+                    </h2>
+                    <button
+                      onClick={() => navigateDate("next")}
+                      className="p-2 border border-black/20 rounded-[5px] bg-white hover:bg-black transition-colors group"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-black group-hover:stroke-white"/>
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => navigateDate("today")}
+                      className="px-4 py-2.5 text-xs font-medium text-left border border-black/20 rounded-[5px] bg-white hover:bg-black hover:text-white transition-colors focus:outline-none cursor-pointer"
+                    >
+                      Today
+                    </button>
+                    {/* Team Select with Custom Arrow */}
+                    <div className="relative group">
+                      <select
+                        value={filters.team}
+                        onChange={(e) => setFilters({ ...filters, team: e.target.value })}
+                        className="appearance-none px-4 py-2.5 pr-10 text-xs font-medium text-left border border-black/20 rounded-[5px] bg-white hover:bg-black hover:text-white transition-colors focus:outline-none cursor-pointer"
+                      >
+                        <option value="all">Team: All Team</option>
+                        {staffMembers.map((staff) => (
+                          <option key={staff.id} value={staff.id}>
+                            Team: {staff.name}
+                          </option>
+                        ))}
+                      </select>
+                      <svg
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none stroke-black group-hover:stroke-white transition-colors"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                    {/* Status Select with Custom Arrow */}
+                    <div className="relative group">
+                      <select
+                        value={filters.status}
+                        onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                        className="appearance-none px-4 py-2.5 pr-10 text-xs font-medium text-left border border-black/20 rounded-[5px] bg-white hover:bg-black hover:text-white transition-colors focus:outline-none cursor-pointer"
+                      >
+                        <option value="all">Status: All Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="started">Started</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                      <svg
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none stroke-black group-hover:stroke-white transition-colors"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* View Toggle */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-white text-xs rounded-lg p-1">
+                      <button
+                        onClick={() => setCalendarView("day")}
+                        className={`cursor-pointer px-4 py-1.5 rounded transition-colors ${
+                          calendarView === "day"
+                            ? "bg-primary/10 text-primary"
+                            : ""
+                        }`}
+                      >
+                        Day
+                      </button>
+                      <button
+                        onClick={() => setCalendarView("week")}
+                        className={`cursor-pointer px-4 py-1.5 rounded transition-colors ${
+                          calendarView === "week"
+                            ? "bg-primary/10 text-primary"
+                            : ""
+                        }`}
+                      >
+                        Week
+                      </button>
+                      <button
+                        onClick={() => setCalendarView("month")}
+                        className={`cursor-pointer px-4 py-1.5 rounded transition-colors ${
+                          calendarView === "month"
+                            ? "bg-primary/10 text-primary"
+                            : ""
+                        }`}
+                      >
+                        Month
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Calendar Content */}
+              <div className="bg-white relative">
+                {calendarView === "day" && (
+                  <div className="">
+                    {/* Staff Navigation Arrows */}
+                    {staffMembers.length > 3 && (
+                      <>
+                        <button
+                          onClick={() => setStaffScrollIndex(Math.max(0, staffScrollIndex - 1))}
+                          disabled={staffScrollIndex === 0}
+                          className={`absolute left-0 top-1/2 p-2 cursor-pointer z-20 rounded-[5px] ${
+                            staffScrollIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                          style={{ top: 'calc(50% + 40px)' }}
+                        >
+                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setStaffScrollIndex(Math.min(staffMembers.length - 3, staffScrollIndex + 1))}
+                          disabled={staffScrollIndex >= staffMembers.length - 3}
+                          className={`absolute right-0 top-1/2 p-2 cursor-pointer z-20 rounded-[5px]  ${
+                            staffScrollIndex >= staffMembers.length - 3 ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                          style={{ top: 'calc(50% + 40px)' }}
+                        >
+                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      </>
+                    )}
+
+                    <div className="overflow-x-auto">
+                      <div className="flex min-w-full">
+                        {/* Time Column */}
+                        <div className="w-10 shrink-0 border-r border-gray-200">
+                          <div className="h-[105px] border-b border-gray-200 bg-transparent"></div>
+                          {getTimeSlots().map((time, idx) => (
+                            <div
+                              key={idx}
+                              className="h-14 border-b border-gray-100 p-1.5 pt-1"
+                            >
+                              <span className="text-[9px] font-semibold text-black/60">{time.display}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Staff Columns - Show only 3 at a time */}
+                        <div className="flex-1 flex relative">
+                          {staffMembers.slice(staffScrollIndex, staffScrollIndex + 3).map((staff) => {
+                            const dayBookings = getBookingsForSlot(currentDate, staff.id);
+                            return (
+                              <div key={staff.id} className="flex-1 border-r border-gray-200 last:border-r-0">
+                                {/* Staff Header */}
+                                <div className="border-b border-gray-200 p-3 flex flex-col items-center justify-center h-[105px]">
+                                  {staff.avatar ? (
+                                    <div
+                                      className="w-12 h-12 rounded-full mb-2 flex items-center justify-center overflow-hidden"
+                                      style={{ 
+                                        border: `3px solid ${staff.calendarColor || "#9CA3AF"}`,
+                                      }}
+                                    >
+                                      <img
+                                        src={staff.avatar}
+                                        alt={staff.name}
+                                        className="w-full h-full rounded-full object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className="w-14 h-14 rounded-full flex items-center justify-center text-base font-semibold text-white mb-2"
+                                      style={{ 
+                                        backgroundColor: staff.calendarColor || "#9CA3AF",
+                                        border: `3px solid ${staff.calendarColor || "#9CA3AF"}`
+                                      }}
+                                    >
+                                      {staff.name.charAt(0)}
+                                    </div>
+                                  )}
+                                  <span className="text-xs font-medium text-black/80">{staff.name}</span>
+                                </div>
+
+                                {/* Time Slots */}
+                                <div className="relative">
+                                  {getTimeSlots().map((timeSlot, slotIdx) => {
+                                    const slotStart = new Date(currentDate);
+                                    slotStart.setHours(timeSlot.hour, timeSlot.minute, 0, 0);
+                                    const slotEnd = new Date(slotStart);
+                                    slotEnd.setMinutes(slotEnd.getMinutes() + 90); // 1.5 hours = 90 minutes
+
+                                    const slotBookings = dayBookings.filter((booking) => {
+                                      const bookingStart = new Date(booking.scheduledOn);
+                                      const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
+                                      return (
+                                        (bookingStart >= slotStart && bookingStart < slotEnd) ||
+                                        (bookingEnd > slotStart && bookingEnd <= slotEnd) ||
+                                        (bookingStart <= slotStart && bookingEnd >= slotEnd)
+                                      );
+                                    });
+
+                                    return (
+                                      <div
+                                        key={slotIdx}
+                                        className="h-14 border-b border-gray-100 relative"
+                                      >
+                                        {slotBookings.map((booking, idx) => {
+                                          const bookingStart = new Date(booking.scheduledOn);
+                                          const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
+                                          const startMinutes = bookingStart.getHours() * 60 + bookingStart.getMinutes();
+                                          const endMinutes = bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
+                                          const slotStartMinutes = timeSlot.totalMinutes;
+                                          const slotEndMinutes = slotStartMinutes + 90;
+                                          
+                                          // Calculate position and height (based on 90-minute slots)
+                                          const topPercent = ((startMinutes - slotStartMinutes) / 90) * 100;
+                                          const heightPercent = ((endMinutes - startMinutes) / 90) * 100;
+                                          
+                                          return (
+                                            <div
+                                              key={booking.id}
+                                              onClick={() => handleBookingClick(booking)}
+                                              className={`absolute left-1 right-1 rounded p-1.5 cursor-pointer border ${getStatusColor(booking.status)}`}
+                                              style={{
+                                                top: `${Math.max(0, topPercent)}%`,
+                                                height: `${Math.min(100, heightPercent)}%`,
+                                                zIndex: 10 + idx,
+                                              }}
+                                            >
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="text-xs font-semibold text-gray-900 truncate">
+                                                    {booking.customer.name}
+                                                  </div>
+                                                  <div className="text-[10px] text-gray-600 truncate">
+                                                    {booking.service}
+                                                  </div>
+                                                  <div className="text-[10px] text-gray-500">
+                                                    {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
+                                                  </div>
+                                                </div>
+                                                <div className="ml-1 shrink-0">
+                                                  {getStatusIcon(booking.status)}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {calendarView === "week" && (
+                  <div className="overflow-x-auto">
+                    <div className="min-w-full">
+                      {/* Header Row */}
+                      <div className="flex border-b border-gray-200">
+                        <div className="w-48 flex-shrink-0 border-r border-gray-200 p-4">
+                          <span className="text-sm font-semibold text-gray-900">Team Members</span>
+                        </div>
+                        <div className="flex-1 flex">
+                          {getWeekDays().map((day, idx) => {
+                            const isToday = day.toDateString() === new Date().toDateString();
+                            return (
+                              <div
+                                key={idx}
+                                className={`flex-1 border-r border-gray-200 last:border-r-0 p-4 text-center ${
+                                  isToday ? "bg-primary/5" : ""
+                                }`}
+                              >
+                                <div className="text-xs text-gray-600 mb-1">
+                                  {day.toLocaleDateString("en-GB", { weekday: "short" })}
+                                </div>
+                                <div className={`text-sm font-semibold ${isToday ? "text-primary" : "text-gray-900"}`}>
+                                  {day.getDate()}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Staff Rows */}
+                      {staffMembers.map((staff) => (
+                        <div key={staff.id} className="flex border-b border-gray-200 min-h-[200px]">
+                          <div className="w-48 flex-shrink-0 border-r border-gray-200 p-4">
+                            <div className="flex items-center gap-3">
+                              {staff.avatar ? (
+                                <img
+                                  src={staff.avatar}
+                                  alt={staff.name}
+                                  className="w-10 h-10 rounded-full"
+                                />
+                              ) : (
+                                <div
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white"
+                                  style={{ backgroundColor: staff.calendarColor || "#9CA3AF" }}
+                                >
+                                  {staff.name.charAt(0)}
+                                </div>
+                              )}
+                              <span className="text-sm font-medium text-gray-900">{staff.name}</span>
+                            </div>
+                          </div>
+                          <div className="flex-1 flex relative">
+                            {getWeekDays().map((day, dayIdx) => {
+                              const dayBookings = getBookingsForSlot(day, staff.id);
+                              return (
+                                <div
+                                  key={dayIdx}
+                                  className="flex-1 border-r border-gray-200 last:border-r-0 p-2 relative"
+                                >
+                                  <div className="space-y-2">
+                                    {dayBookings.map((booking) => {
+                                      const bookingStart = new Date(booking.scheduledOn);
+                                      const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
+                                      return (
+                                        <div
+                                          key={booking.id}
+                                          onClick={() => handleBookingClick(booking)}
+                                          className={`p-2 rounded border cursor-pointer ${getStatusColor(booking.status)}`}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <div className="text-xs font-semibold text-gray-900 truncate flex-1">
+                                              {booking.customer.name}
+                                            </div>
+                                            <div className="ml-1 flex-shrink-0">
+                                              {getStatusIcon(booking.status)}
+                                            </div>
+                                          </div>
+                                          <div className="text-[10px] text-gray-600 truncate mb-1">
+                                            {booking.service}
+                                          </div>
+                                          <div className="text-[10px] text-gray-500">
+                                            {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {calendarView === "month" && (
+                  <div>
+                    {/* Weekday Headers */}
+                    <div className="grid grid-cols-7 border-b border-gray-200">
+                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+                        <div key={day} className="p-3 text-center text-xs font-semibold text-gray-600">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7">
+                      {getMonthDays().map((day, idx) => {
+                        const isCurrentMonth = day.getMonth() === currentDate.getMonth();
+                        const isToday = day.toDateString() === new Date().toDateString();
+                        const dayBookings = getBookingsForSlot(day);
+                        const visibleBookings = dayBookings.slice(0, 3);
+                        const moreCount = dayBookings.length - 3;
+
+                        return (
+                          <div
+                            key={idx}
+                            className={`min-h-[120px] border-r border-b border-gray-200 p-2 ${
+                              !isCurrentMonth ? "bg-gray-50" : ""
+                            } ${isToday ? "bg-primary/5" : ""}`}
+                          >
+                            <div className={`text-sm font-semibold mb-1 ${isCurrentMonth ? "text-gray-900" : "text-gray-400"} ${isToday ? "text-primary" : ""}`}>
+                              {day.getDate()}
+                            </div>
+                            <div className="space-y-1">
+                              {visibleBookings.map((booking) => {
+                                const bookingStart = new Date(booking.scheduledOn);
+                                return (
+                                  <div
+                                    key={booking.id}
+                                    onClick={() => handleBookingClick(booking)}
+                                    className={`p-1.5 rounded text-[10px] cursor-pointer border truncate ${getStatusColor(booking.status)}`}
+                                  >
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-semibold truncate">{booking.customer.name}</span>
+                                      <span className="flex-shrink-0">{getStatusIcon(booking.status)}</span>
+                                    </div>
+                                    <div className="text-[9px] text-gray-600 truncate">{booking.service}</div>
+                                    <div className="text-[9px] text-gray-500">
+                                      {formatTime12Hour(bookingStart)}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {moreCount > 0 && (
+                                <div className="text-[10px] text-gray-500 font-medium pl-1">
+                                  + {moreCount} more
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -646,7 +1431,7 @@ export default function Calendar() {
                       </Button>
                           <button
                             onClick={() => handleDeclineBooking(String(booking.id))}
-                            className="px-4 py-2 text-xs font-medium rounded-[10px] border border-black bg-white text-black hover:bg-black hover:text-white transition-colors cursor-pointer focus:outline-none"
+                            className="px-4 py-2 text-xs font-medium rounded-[5px] border border-black bg-white text-black hover:bg-black hover:text-white transition-colors cursor-pointer focus:outline-none"
                       >
                         Decline
                           </button>
@@ -681,11 +1466,31 @@ export default function Calendar() {
       {canAddBooking && isBookingSidebarOpen && (
         <AddBookingSidebar
           onClose={() => setIsBookingSidebarOpen(false)}
-          onSave={() => {
+          onSave={(customerName: string) => {
             fetchBookings();
             setIsBookingSidebarOpen(false);
+            setSuccessMessage(`${customerName} was added to the bookings.`);
+            setShowSuccessNotification(true);
+            // Auto-hide notification after 3 seconds
+            setTimeout(() => {
+              setShowSuccessNotification(false);
+            }, 3000);
           }}
         />
+      )}
+
+      {/* Success Notification */}
+      {showSuccessNotification && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] animate-slideDown">
+          <div className="bg-[#E0F7E9] border border-[#4CAF50]/20 rounded-lg px-6 py-3 shadow-lg flex items-center gap-3 min-w-[300px]">
+            <div className="flex-shrink-0 w-6 h-6 bg-[#4CAF50] rounded-full flex items-center justify-center">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M11.6667 3.5L5.25 9.91667L2.33333 7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-[#1B5E20]">{successMessage}</p>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -856,8 +1661,9 @@ function AddBookingSidebar({
   onSave,
 }: {
   onClose: () => void;
-  onSave: () => void;
+  onSave: (customerName: string) => void;
 }) {
+  const { currentBranch } = useBranch();
   const [currentStep, setCurrentStep] = useState(1);
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; email: string; avatar?: string } | null>(null);
@@ -869,13 +1675,26 @@ function AddBookingSidebar({
   const [isClosing, setIsClosing] = useState(false);
   const [openTeamMemberDropdown, setOpenTeamMemberDropdown] = useState<string | null>(null);
   const [isAddingNewCustomer, setIsAddingNewCustomer] = useState(false);
+  const [branchOpeningHours, setBranchOpeningHours] = useState<any>(null);
+  const [isLoadingOpeningHours, setIsLoadingOpeningHours] = useState(false);
+  const [services, setServices] = useState<Array<{ id: string; name: string; duration: number; price: number; category: string; staff?: Array<{ id: string | number; name: string; avatar?: string }> }>>([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(false);
+  const [customers, setCustomers] = useState<Array<{ id: string; name: string; email: string; avatar?: string }>>([]);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const [visibleCustomersCount, setVisibleCustomersCount] = useState(8); // Show 8 customers initially
+  const customerListRef = useRef<HTMLDivElement>(null);
+  const lastFetchedKey = useRef<string>(""); // Track last fetched date+time+branch to prevent duplicate calls
+  const isFetchingRef = useRef<boolean>(false); // Track if we're currently fetching to prevent concurrent calls
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const itiRef = useRef<ReturnType<typeof intlTelInput> | null>(null);
   const [newCustomer, setNewCustomer] = useState({
     firstName: "",
     lastName: "",
     phone: "",
     email: "",
-    countryCode: "+961", // Default to Lebanon
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
 
   useEffect(() => {
     // Trigger animation after mount - small delay to ensure initial state renders
@@ -884,6 +1703,15 @@ function AddBookingSidebar({
     }, 10);
     return () => clearTimeout(timer);
   }, []);
+
+  // Reset selected time when date changes (if the new date has different opening hours)
+  // Also reset services and fetch key when date changes
+  useEffect(() => {
+    if (currentStep === 2) {
+      setSelectedTime(""); // Reset time when date changes
+    }
+  }, [selectedDate, currentStep]);
+
 
   const handleClose = () => {
     setIsClosing(true);
@@ -896,38 +1724,420 @@ function AddBookingSidebar({
 
   const steps = ["Customer", "Booking Details", "Services", "Summary"];
 
-  // Mock data - replace with actual API calls
-  const customers = [
-    { id: "1", name: "Sophia Davis", email: "sophiadavis@gmail.com", avatar: "A" },
-    { id: "2", name: "John Smith", email: "johnsmith@gmail.com", avatar: "J" },
-    { id: "3", name: "Emma Wilson", email: "emmawilson@gmail.com", avatar: "E" },
-  ];
+  // Fetch customers from API
+  const fetchCustomers = useCallback(async () => {
+    if (!currentBranch?.id) {
+      console.log("No branch ID available, skipping customers fetch");
+      return;
+    }
 
-  const services = [
-    { id: "1", name: "Brushing", duration: 30, price: 20.00, category: "Category Name" },
-    { id: "2", name: "Haircut", duration: 30, price: 20.00, category: "Category Name" },
-    { id: "3", name: "Facial", duration: 30, price: 20.00, category: "Category Name" },
-    { id: "4", name: "Bread Trim", duration: 30, price: 20.00, category: "Category Name" },
-    { id: "5", name: "Eyelash Extension", duration: 30, price: 20.00, category: "Category Name 2" },
-    { id: "6", name: "Blowout", duration: 30, price: 20.00, category: "Category Name 2" },
-  ];
+    setIsLoadingCustomers(true);
+    try {
+      // Note: branch_id will be automatically added by axios interceptor
+      const response = await axiosClient.get("/customers/get");
+      
+      // Parse response structure - adjust based on actual API response
+      const customersData = response.data?.data?.customers || response.data?.customers || response.data?.data || [];
+      
+      // Transform API response to match our format
+      const transformedCustomers: Array<{ id: string; name: string; email: string; avatar?: string }> = customersData.map((customer: any) => {
+        // Extract name from first_name and last_name, or use name field
+        const firstName = customer.first_name || '';
+        const lastName = customer.last_name || '';
+        const fullName = customer.name || `${firstName} ${lastName}`.trim() || 'Customer';
+        
+        // Extract email
+        const email = customer.email || '';
+        
+        // Extract avatar from image object or generate initials
+        const avatarUrl = customer.image?.image || customer.image?.thumb || customer.avatar || null;
+        const initials = fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) || 'CU';
+        
+        return {
+          id: String(customer.id),
+          name: fullName,
+          email: email,
+          avatar: avatarUrl || initials,
+        };
+      });
+      
+      setCustomers(transformedCustomers);
+    } catch (error) {
+      console.error("Error fetching customers:", error);
+      setCustomers([]);
+    } finally {
+      setIsLoadingCustomers(false);
+    }
+  }, [currentBranch?.id]);
 
-  const teamMembers = [
-    { id: "any", name: "Any Team Member", avatar: null },
-    { id: "1", name: "Karen Taylor", avatar: "KT" },
-    { id: "2", name: "Sarah Johnson", avatar: "SJ" },
-  ];
+  // Fetch customers when step 1 is reached or when branch changes
+  useEffect(() => {
+    if (currentStep === 1 && currentBranch?.id && customers.length === 0 && !isLoadingCustomers) {
+      fetchCustomers();
+    }
+  }, [currentStep, currentBranch?.id, customers.length, isLoadingCustomers, fetchCustomers]);
 
-  const timeSlots = [
-    "10:00 am", "10:15 am", "10:30 am", "10:45 am",
-    "11:00 am", "11:15 am", "11:30 am", "11:45 am",
-    "12:00 pm", "12:15 pm", "12:30 pm", "12:45 pm",
-    "01:00 pm", "01:15 pm", "01:30 pm", "01:45 pm",
-    "02:00 pm", "02:15 pm", "02:30 pm", "02:45 pm",
-    "03:00 pm", "03:15 pm", "03:30 pm", "03:45 pm",
-    "04:00 pm", "04:15 pm", "04:30 pm", "04:45 pm",
-    "05:00 pm"
-  ];
+  // Initialize intl-tel-input for phone number input
+  useEffect(() => {
+    if (phoneInputRef.current && isAddingNewCustomer && currentStep === 2) {
+      if (!itiRef.current) {
+        itiRef.current = intlTelInput(phoneInputRef.current, {
+          initialCountry: "lb",
+          utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.10/build/js/utils.js",
+        } as any);
+
+        // Listen for phone number input
+        phoneInputRef.current.addEventListener('input', () => {
+          if (phoneInputRef.current && itiRef.current) {
+            setNewCustomer(prev => ({
+              ...prev,
+              phone: phoneInputRef.current?.value || "",
+            }));
+          }
+        });
+      }
+    }
+
+    return () => {
+      if (itiRef.current) {
+        itiRef.current.destroy();
+        itiRef.current = null;
+      }
+    };
+  }, [isAddingNewCustomer, currentStep]);
+
+  // Convert 12-hour time format to 24-hour format for API
+  const convertTo24Hour = (time12h: string): string => {
+    if (!time12h) return "";
+    
+    const parts = time12h.trim().split(" ");
+    const period = parts[parts.length - 1].toLowerCase(); // Get am/pm
+    const timePart = parts.slice(0, -1).join(" "); // Get time part
+    const [hours, minutes] = timePart.split(":").map(Number);
+    
+    let hours24 = hours;
+    if (period === "pm" && hours !== 12) {
+      hours24 = hours + 12;
+    } else if (period === "am" && hours === 12) {
+      hours24 = 0;
+    }
+    
+    return `${hours24.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+  };
+
+  // Format date as YYYY-MM-DD for API
+  const formatDateForAPI = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // Fetch services from API with available staff members based on date and time
+  const fetchServices = useCallback(async () => {
+    if (!currentBranch?.id || !selectedDate || !selectedTime) {
+      console.log("Missing required data for fetching services: branch_id, date, or time");
+      return;
+    }
+    
+    // Create a unique key for this fetch request
+    const dateStr = formatDateForAPI(selectedDate);
+    const timeStr = convertTo24Hour(selectedTime);
+    const fetchKey = `${currentBranch.id}-${dateStr}-${timeStr}`;
+    
+    // Prevent duplicate calls for the same date/time or if already fetching
+    if (lastFetchedKey.current === fetchKey || isFetchingRef.current) {
+      return;
+    }
+    
+    lastFetchedKey.current = fetchKey;
+    isFetchingRef.current = true;
+    setIsLoadingServices(true);
+    
+    try {
+      // Note: branch_id will be automatically added by axios interceptor
+      const response = await axiosClient.get("/services/get-services-available-staff", {
+        params: { 
+          date: dateStr,
+          time: timeStr,
+        },
+      });
+      
+      const servicesData = response.data?.data?.services || response.data?.services || {};
+      
+      // Transform API response to match our format
+      const transformedServices: Array<{ 
+        id: string; 
+        name: string; 
+        duration: number; 
+        price: number; 
+        category: string;
+        staff?: Array<{ id: string | number; name: string; avatar?: string }>;
+      }> = [];
+      
+      // Iterate through each category (e.g., "Hair", "Body")
+      Object.keys(servicesData).forEach((categoryName) => {
+        const categoryServices = servicesData[categoryName] || [];
+        categoryServices.forEach((service: any) => {
+          // Extract staff members if available
+          const staffMembers = service.staff || service.staff_members || service.available_staff || [];
+          const transformedStaff = staffMembers.map((staff: any) => {
+            const firstName = staff.first_name || '';
+            const lastName = staff.last_name || '';
+            const fullName =
+              staff.name ||
+              staff.full_name ||
+              `${firstName} ${lastName}`.trim() ||
+              'Staff Member';
+
+            // Prefer image URLs from image.image or image.thumb, then fall back to any avatar field
+            const avatarUrl =
+              staff.image?.image ||
+              staff.image?.thumb ||
+              staff.avatar ||
+              null;
+
+            const initials =
+              fullName
+                .split(' ')
+                .filter(Boolean)
+                .map((n: string) => n[0])
+                .join('')
+                .toUpperCase()
+                .substring(0, 2) || 'SM';
+
+            return {
+              id: staff.id || staff.staff_id,
+              name: fullName,
+              avatar: avatarUrl || initials,
+            };
+          });
+          
+          transformedServices.push({
+            id: String(service.id),
+            name: service.label || service.name || "Service",
+            duration: service.duration || service.duration_minutes || 30,
+            price: parseFloat(service.price || service.cost || 0),
+            category: categoryName,
+            staff: transformedStaff.length > 0 ? transformedStaff : undefined,
+          });
+        });
+      });
+      
+      setServices(transformedServices);
+    } catch (error) {
+      console.error("Error fetching services:", error);
+      setServices([]);
+      lastFetchedKey.current = ""; // Reset on error to allow retry
+    } finally {
+      setIsLoadingServices(false);
+      isFetchingRef.current = false;
+    }
+  }, [currentBranch?.id, selectedDate, selectedTime]);
+
+  // Fetch services when step 3 is reached and date/time are selected
+  useEffect(() => {
+    if (currentStep === 3) {
+      fetchServices();
+    }
+  }, [currentStep, fetchServices]);
+
+  // Fetch branch opening hours
+  const fetchBranchOpeningHours = useCallback(async () => {
+    if (!currentBranch?.id) {
+      console.log("No branch ID available, skipping opening hours fetch");
+      return;
+    }
+    
+    setIsLoadingOpeningHours(true);
+    try {
+      // Note: branch_id will be automatically added by axios interceptor
+      const response = await axiosClient.get("/branch/get");
+      
+      const branchData = response.data?.data?.branch || response.data?.branch || response.data?.data || response.data;
+      const openingHours = branchData?.opening_hours;
+      
+      if (openingHours) {
+        setBranchOpeningHours(openingHours);
+      } else {
+        console.log("No opening hours found in branch data");
+        setBranchOpeningHours(null);
+      }
+    } catch (error: any) {
+      // Silently handle errors - opening hours are optional
+      // Only log if it's not a 404 or similar expected error
+      if (error?.response?.status !== 404) {
+        console.warn("Could not fetch branch opening hours:", error?.response?.status || error?.message || "Unknown error");
+      }
+      setBranchOpeningHours(null);
+    } finally {
+      setIsLoadingOpeningHours(false);
+    }
+  }, [currentBranch?.id]);
+
+  // Fetch branch opening hours when branch changes or when step 2 is reached
+  useEffect(() => {
+    // Only fetch when we have a branch and we're on step 2 (Booking Details)
+    if (currentBranch?.id && currentStep === 2 && !branchOpeningHours && !isLoadingOpeningHours) {
+      fetchBranchOpeningHours();
+    }
+  }, [currentBranch?.id, currentStep, branchOpeningHours, isLoadingOpeningHours, fetchBranchOpeningHours]);
+
+  // Convert 24-hour time to 12-hour format
+  const convert24To12Hour = (time24h: string): string => {
+    if (!time24h) return "10:00 am";
+    
+    const time = time24h.trim().replace(/\s+/g, '');
+    // Check if already in 12-hour format
+    if (/^\d{1,2}:\d{2}(am|pm)$/i.test(time)) {
+      const match = time.match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
+      if (match) {
+        return `${match[1]}:${match[2]} ${match[3].toLowerCase()}`;
+      }
+      return time;
+    }
+    
+    // Parse 24-hour format
+    const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = match[2];
+      
+      if (isNaN(hours) || hours < 0 || hours > 23) {
+        return "10:00 am";
+      }
+      
+      const period = hours >= 12 ? "pm" : "am";
+      const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+      
+      return `${displayHours.toString().padStart(2, "0")}:${minutes} ${period}`;
+    }
+    
+    return "10:00 am";
+  };
+
+  // Get opening hours for a specific day
+  const getOpeningHoursForDay = (date: Date): { startTime: string; endTime: string } | null => {
+    if (!branchOpeningHours) return null;
+    
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    // Convert to Monday-first format (0 = Monday, 6 = Sunday)
+    const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    
+    const dayNameToIndex: { [key: string]: number } = {
+      monday: 0,
+      tuesday: 1,
+      wednesday: 2,
+      thursday: 3,
+      friday: 4,
+      saturday: 5,
+      sunday: 6,
+      mon: 0,
+      tue: 1,
+      wed: 2,
+      thu: 3,
+      fri: 4,
+      sat: 5,
+      sun: 6,
+    };
+
+    let entries: any[] = [];
+    if (Array.isArray(branchOpeningHours)) {
+      entries = branchOpeningHours;
+    } else if (typeof branchOpeningHours === 'object') {
+      entries = Object.values(branchOpeningHours);
+    } else {
+      return null;
+    }
+
+    // Find matching day entry
+    for (const entry of entries) {
+      if (!entry || !entry.day || !entry.from || !entry.to) continue;
+      
+      const dayStr = entry.day.trim().toLowerCase();
+      
+      // Check if it's a range
+      if (dayStr.includes("-") || dayStr.includes("to")) {
+        const rangeMatch = dayStr.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s*[-to]+\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)/i);
+        if (rangeMatch) {
+          const startDay = rangeMatch[1].toLowerCase();
+          const endDay = rangeMatch[2].toLowerCase();
+          const startIndex = dayNameToIndex[startDay];
+          const endIndex = dayNameToIndex[endDay];
+          
+          if (startIndex !== undefined && endIndex !== undefined && dayIndex >= startIndex && dayIndex <= endIndex) {
+            return {
+              startTime: convert24To12Hour(entry.from),
+              endTime: convert24To12Hour(entry.to),
+            };
+          }
+        }
+      } else {
+        // Single day
+        const entryDayIndex = dayNameToIndex[dayStr];
+        if (entryDayIndex === dayIndex) {
+          return {
+            startTime: convert24To12Hour(entry.from),
+            endTime: convert24To12Hour(entry.to),
+          };
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  // Helper function to parse time string to minutes from midnight
+  const parseTimeToMinutes = (timeStr: string): number => {
+    const parts = timeStr.trim().split(" ");
+    const period = parts[parts.length - 1].toLowerCase(); // Get am/pm
+    const timePart = parts.slice(0, -1).join(" "); // Get time part (handles "01:00" or "1:00")
+    const [hours, minutes] = timePart.split(":").map(Number);
+    let totalMinutes = hours * 60 + minutes;
+    if (period === "pm" && hours !== 12) {
+      totalMinutes += 12 * 60;
+    } else if (period === "am" && hours === 12) {
+      totalMinutes -= 12 * 60;
+    }
+    return totalMinutes;
+  };
+
+  // Helper function to format minutes to time string
+  const formatMinutesToTime = (minutes: number): string => {
+    const hours24 = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    const period = hours24 >= 12 ? "pm" : "am";
+    let hours12 = hours24 > 12 ? hours24 - 12 : hours24 === 0 ? 12 : hours24;
+    const formattedMins = mins.toString().padStart(2, "0");
+    return `${hours12}:${formattedMins} ${period}`;
+  };
+
+  // Generate time slots based on opening hours for selected day
+  const timeSlots = useMemo(() => {
+    if (!branchOpeningHours) {
+      return [];
+    }
+
+    const hours = getOpeningHoursForDay(selectedDate);
+    
+    if (!hours) {
+      // If no opening hours for this day, return empty array (day is still selectable)
+      return [];
+    }
+
+    const slots: string[] = [];
+    const startMinutes = parseTimeToMinutes(hours.startTime);
+    const endMinutes = parseTimeToMinutes(hours.endTime);
+    
+    // Generate slots in 15-minute intervals
+    let currentMinutes = startMinutes;
+    while (currentMinutes < endMinutes) {
+      slots.push(formatMinutesToTime(currentMinutes));
+      currentMinutes += 15;
+    }
+    
+    return slots;
+  }, [selectedDate, branchOpeningHours]);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -958,7 +2168,15 @@ function AddBookingSidebar({
       if (exists) {
         return prev.filter(s => s.id !== service.id);
       } else {
-        return [...prev, { id: service.id, name: service.name, duration: service.duration, price: service.price }];
+        // Add service with first staff member as default (for "Any Team Member")
+        const firstStaffId = service.staff && service.staff.length > 0 ? String(service.staff[0].id) : undefined;
+        return [...prev, { 
+          id: service.id, 
+          name: service.name, 
+          duration: service.duration, 
+          price: typeof service.price === 'number' ? service.price : parseFloat(service.price || 0),
+          teamMember: firstStaffId, // Store first staff ID for "Any Team Member"
+        }];
       }
     });
   };
@@ -978,31 +2196,6 @@ function AddBookingSidebar({
       const startTime = index === 0 ? currentTime : ""; // Calculate based on previous service end time
       return { ...service, startTime };
     });
-  };
-
-  // Helper function to parse time string to minutes from midnight
-  const parseTimeToMinutes = (timeStr: string): number => {
-    const parts = timeStr.trim().split(" ");
-    const period = parts[parts.length - 1].toLowerCase(); // Get am/pm
-    const timePart = parts.slice(0, -1).join(" "); // Get time part (handles "01:00" or "1:00")
-    const [hours, minutes] = timePart.split(":").map(Number);
-    let totalMinutes = hours * 60 + minutes;
-    if (period === "pm" && hours !== 12) {
-      totalMinutes += 12 * 60;
-    } else if (period === "am" && hours === 12) {
-      totalMinutes -= 12 * 60;
-    }
-    return totalMinutes;
-  };
-
-  // Helper function to format minutes to time string
-  const formatMinutesToTime = (minutes: number): string => {
-    const hours24 = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    const period = hours24 >= 12 ? "pm" : "am";
-    let hours12 = hours24 > 12 ? hours24 - 12 : hours24 === 0 ? 12 : hours24;
-    const formattedMins = mins.toString().padStart(2, "0");
-    return `${hours12}:${formattedMins} ${period}`;
   };
 
   // Calculate service start times
@@ -1042,7 +2235,8 @@ function AddBookingSidebar({
                 handleClose();
               } else if (isAddingNewCustomer) {
                 setIsAddingNewCustomer(false);
-                setNewCustomer({ firstName: "", lastName: "", phone: "", email: "", countryCode: "+961" });
+                setNewCustomer({ firstName: "", lastName: "", phone: "", email: "" });
+                setCurrentStep(1); // Go back to customer selection
               } else {
                 setCurrentStep(currentStep - 1);
               }
@@ -1068,9 +2262,9 @@ function AddBookingSidebar({
 
         {/* Progress Steps */}
         <div className="px-6 pt-4">
-          <div className="flex items-center gap-3.5 text-xs">
+          <div className="flex items-center gap-2 text-xs">
             {steps.map((step, index) => (
-              <div key={step} className="flex items-center gap-3.5">
+              <div key={step} className="flex items-center gap-2">
                 <span className={`font-medium ${currentStep === index + 1 ? "text-black" : "text-black/40"}`}>
                   {step}
                 </span>
@@ -1092,8 +2286,13 @@ function AddBookingSidebar({
               {/* Add New Customer / Walk-in Options */}
               <div className="flex gap-4 border-b border-black/20 pb-4 mb-4">
                 <button
-                  onClick={() => {
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Navigate to step 2 with customer form
                     setIsAddingNewCustomer(true);
+                    setCurrentStep(2);
                   }}
                   className="group flex-1 flex items-center gap-3 cursor-pointer"
                 >
@@ -1170,14 +2369,49 @@ function AddBookingSidebar({
               <SearchInput
                 placeholder="Search by customer name"
                 value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
+                onChange={(e) => {
+                  setCustomerSearch(e.target.value);
+                  setVisibleCustomersCount(8); // Reset to 8 when search changes
+                }}
               />
 
               {/* Customer List */}
-              <div className="space-y-2 mt-4">
-                {customers
-                  .filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()))
-                  .map((customer) => (
+              <div 
+                ref={customerListRef}
+                className="space-y-2 mt-4 overflow-y-auto"
+                onScroll={(e) => {
+                  const target = e.target as HTMLDivElement;
+                  const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+                  
+                  // Load more when user scrolls within 100px of bottom
+                  if (scrollBottom < 100) {
+                    const filteredCustomers = customers.filter(c => 
+                      c.name.toLowerCase().includes(customerSearch.toLowerCase()) || 
+                      c.email.toLowerCase().includes(customerSearch.toLowerCase())
+                    );
+                    if (visibleCustomersCount < filteredCustomers.length) {
+                      setVisibleCustomersCount(prev => Math.min(prev + 8, filteredCustomers.length));
+                    }
+                  }
+                }}
+              >
+                {isLoadingCustomers ? (
+                  <div className="text-xs text-black/50 py-8 text-center">Loading customers...</div>
+                ) : (() => {
+                  const filteredCustomers = customers.filter(c => 
+                    c.name.toLowerCase().includes(customerSearch.toLowerCase()) || 
+                    c.email.toLowerCase().includes(customerSearch.toLowerCase())
+                  );
+                  
+                  if (filteredCustomers.length === 0) {
+                    return <div className="text-xs text-black/50 py-8 text-center">No customers found</div>;
+                  }
+                  
+                  const visibleCustomers = filteredCustomers.slice(0, visibleCustomersCount);
+                  
+                  return (
+                    <>
+                      {visibleCustomers.map((customer) => (
                     <button
                       key={customer.id}
                       onClick={() => {
@@ -1186,119 +2420,101 @@ function AddBookingSidebar({
                       }}
                       className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-white border border-transparent hover:border-black/10 transition-colors cursor-pointer"
                     >
+                          {customer.avatar && typeof customer.avatar === 'string' && (customer.avatar.startsWith('http') || customer.avatar.startsWith('/')) ? (
+                            <img 
+                              src={customer.avatar} 
+                              alt={customer.name}
+                              className="w-10 h-10 rounded-full object-cover"
+                            />
+                          ) : (
                       <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-sm font-semibold text-primary">
                         {customer.avatar}
                       </div>
+                          )}
                       <div className="flex-1 text-left">
                         <p className="text-xs font-semibold text-black">{customer.name}</p>
                         <p className="text-xs text-black/40">{customer.email}</p>
                       </div>
                     </button>
                   ))}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
 
-          {/* Add New Customer Form */}
-          {currentStep === 1 && isAddingNewCustomer && (
-            <div className="">
-              <div className="flex items-center gap-3 mb-8">
-                <button
-                  onClick={() => {
-                    setIsAddingNewCustomer(false);
-                    setNewCustomer({ firstName: "", lastName: "", phone: "", email: "", countryCode: "+961" });
-                  }}
-                  className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <h3 className="text-base font-bold text-black">Add New Customer</h3>
-              </div>
 
-              <div className="space-y-4">
-                {/* First Name */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
-                    First Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="First Name"
-                    value={newCustomer.firstName}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, firstName: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-
-                {/* Last Name */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Last Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Last Name"
-                    value={newCustomer.lastName}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, lastName: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-
-                {/* Phone Number */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Phone Number <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="relative">
-                      <select
-                        value={newCustomer.countryCode}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, countryCode: e.target.value })}
-                        className="px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary appearance-none bg-white pr-8"
-                      >
-                        <option value="+961">🇱🇧 +961</option>
-                        <option value="+1">🇺🇸 +1</option>
-                        <option value="+44">🇬🇧 +44</option>
-                        <option value="+33">🇫🇷 +33</option>
-                        <option value="+49">🇩🇪 +49</option>
-                      </select>
-                      <svg className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <input
-                      type="tel"
-                      placeholder="X XXX XXX"
-                      value={newCustomer.phone}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Email <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="Email"
-                    value={newCustomer.email}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Select Date & Time */}
+          {/* Step 2: Select Date & Time (with optional Customer Form above) */}
           {currentStep === 2 && (
             <div className="">
               <h3 className="text-base font-bold text-black mb-8">Select Date & Time</h3>
+              
+              {/* Customer Details Form - Show when adding new customer */}
+              {isAddingNewCustomer && (
+                <div className="mb-8">
+                  <h4 className="text-sm font-semibold text-black/80 mb-4">Customer Details <span className="text-primary">*</span></h4>
+                  
+                  <div className="space-y-4">
+                    {/* First Name */}
+                    <div>
+                      <label className="main-label black">
+                        First Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="First Name"
+                        value={newCustomer.firstName}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, firstName: e.target.value })}
+                        className="main-input"
+                      />
+                    </div>
+
+                    {/* Last Name */}
+                    <div>
+                      <label className="main-label black">
+                        Last Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Last Name"
+                        value={newCustomer.lastName}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, lastName: e.target.value })}
+                        className="main-input"
+                      />
+                    </div>
+
+                    {/* Phone Number */}
+                    <div>
+                      <label className="main-label black">
+                        Phone Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        ref={phoneInputRef}
+                        type="tel"
+                        placeholder="X XXX XXX"
+                        value={newCustomer.phone}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                        className="main-input"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="main-label black">
+                        Email Address <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="Email Address"
+                        value={newCustomer.email}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                        className="main-input"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* Date Picker */}
               <div className="space-y-4 border-b border-black/20 pb-4 mb-4">
@@ -1406,6 +2622,13 @@ function AddBookingSidebar({
               {/* Time Slots */}
               <div className="space-y-2 mt-4">
                 <label className="text-xs font-semibold text-black mb-2 block">Available Times *</label>
+                {isLoadingOpeningHours ? (
+                  <div className="text-xs text-black/50 py-4 text-center">Loading opening hours...</div>
+                ) : timeSlots.length === 0 ? (
+                  <div className="text-xs text-black/50 py-4 text-center">
+                    No opening hours defined for this day. Please contact the branch or select a different day.
+                  </div>
+                ) : (
                 <div className="grid grid-cols-4 gap-2">
                   {timeSlots.map((time) => {
                     const isSelected = selectedTime === time;
@@ -1428,6 +2651,7 @@ function AddBookingSidebar({
                     );
                   })}
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -1446,7 +2670,13 @@ function AddBookingSidebar({
                 />
               </div>
 
-              {/* Services by Category */}
+              {/* Loading State */}
+              {isLoadingServices ? (
+                <div className="text-xs text-black/50 py-8 text-center">Loading services...</div>
+              ) : services.length === 0 ? (
+                <div className="text-xs text-black/50 py-8 text-center">No services available</div>
+              ) : (
+                /* Services by Category */
               <div className="space-y-5">
                 {Array.from(new Set(services.map(s => s.category))).map((category) => (
                   <div key={category}>
@@ -1478,7 +2708,7 @@ function AddBookingSidebar({
                               <div className="flex-1 flex flex-col gap-1">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[13px] font-semibold text-black">{service.name}</span>
-                                  <span className="text-[13px] font-semibold text-black/80">${service.price.toFixed(2)}</span>
+                                  <span className="text-[13px] font-semibold text-black/80">${(typeof service.price === 'number' ? service.price : parseFloat(service.price || 0)).toFixed(2)}</span>
                                 </div>
 
                                   <span className="text-xs font-medium text-black/40">{service.duration} min</span>
@@ -1499,26 +2729,51 @@ function AddBookingSidebar({
                                       </svg>
                                       <span>{(() => {
                                         const selectedService = selectedServices.find(s => s.id === service.id);
-                                        const teamMemberId = selectedService?.teamMember || "any";
-                                        const teamMember = teamMembers.find(tm => tm.id === teamMemberId);
+                                        const serviceData = services.find(s => s.id === service.id);
+                                        const availableStaff = serviceData?.staff || [];
+                                        const firstStaffId = availableStaff.length > 0 ? String(availableStaff[0].id) : null;
+                                        const teamMemberId = selectedService?.teamMember;
+                                        
+                                        // If no team member selected or it's the first staff member, show "Any Team Member"
+                                        if (!teamMemberId || teamMemberId === firstStaffId) {
+                                          return "Any Team Member";
+                                        }
+                                        
+                                        const teamMember = serviceData?.staff?.find(tm => String(tm.id) === String(teamMemberId));
                                         return teamMember?.name || "Any Team Member";
                                       })()}</span>
                                       <Arrow direction={openTeamMemberDropdown === service.id ? "up" : "down"} opacity={1} className="w-4" />
                                     </button>
-                                    {openTeamMemberDropdown === service.id && (
-                                      <div className="absolute left-0 mt-1 bg-white border border-black/10 rounded-lg shadow-lg z-50 min-w-[200px]">
-                                        {teamMembers.map((member) => {
+                                    {openTeamMemberDropdown === service.id && (() => {
+                                      const serviceData = services.find(s => s.id === service.id);
+                                      const availableStaff = serviceData?.staff || [];
+                                      const allOptions = [
+                                        { id: "any", name: "Any Team Member", avatar: null },
+                                        ...availableStaff.map(s => ({ id: String(s.id), name: s.name, avatar: s.avatar }))
+                                      ];
+                                      
+                                      return (
+                                      <div 
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="absolute left-0 mt-1 bg-white border border-black/10 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[200px] overflow-y-auto"
+                                      >
+                                          {allOptions.map((member) => {
                                           const selectedService = selectedServices.find(s => s.id === service.id);
-                                          const isSelected = (selectedService?.teamMember || "any") === member.id;
+                                          const firstStaffId = availableStaff.length > 0 ? String(availableStaff[0].id) : null;
+                                          const currentTeamMember = selectedService?.teamMember || firstStaffId || "any";
+                                          // Check if selected is "any" (which is stored as first staff ID)
+                                          const isAnySelected = !selectedService?.teamMember || selectedService?.teamMember === firstStaffId;
+                                          const isSelected = member.id === "any" ? isAnySelected : (!isAnySelected && currentTeamMember === member.id);
                                           return (
                                             <button
                                               key={member.id}
                                               onClick={(e) => {
                                                 e.stopPropagation();
+                                                const selectedTeamMemberId = member.id === "any" ? (firstStaffId || undefined) : member.id;
                                                 setSelectedServices(prev => 
                                                   prev.map(s => 
                                                     s.id === service.id 
-                                                      ? { ...s, teamMember: member.id === "any" ? undefined : member.id }
+                                                      ? { ...s, teamMember: selectedTeamMemberId }
                                                       : s
                                                   )
                                                 );
@@ -1533,9 +2788,17 @@ function AddBookingSidebar({
                                                   <path d="M14.9997 14.1668C16.6105 14.1668 17.9163 12.861 17.9163 11.2502C17.9163 9.63933 16.6105 8.3335 14.9997 8.3335C13.3888 8.3335 12.083 9.63933 12.083 11.2502C12.083 12.861 13.3888 14.1668 14.9997 14.1668Z" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
                                                 </svg>
                                               ) : (
+                                                member.avatar && typeof member.avatar === 'string' && (member.avatar.startsWith('http') || member.avatar.startsWith('/')) ? (
+                                                  <img 
+                                                    src={member.avatar} 
+                                                    alt={member.name}
+                                                    className="w-7 h-7 rounded-full object-cover"
+                                                  />
+                                              ) : (
                                                 <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary">
-                                                  {member.avatar}
+                                                    {member.name ? member.name.substring(0, 2).toUpperCase() : 'SM'}
                                                 </div>
+                                                )
                                               )}
                                               <span className="flex-1 text-left text-xs font-medium text-black">{member.name}</span>
                                               {isSelected && (
@@ -1553,7 +2816,8 @@ function AddBookingSidebar({
                                           );
                                         })}
                                       </div>
-                                    )}
+                                      );
+                                    })()}
                                   </div>
                                 )}
                               </div>
@@ -1564,6 +2828,7 @@ function AddBookingSidebar({
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 
@@ -1610,8 +2875,16 @@ function AddBookingSidebar({
                 <h4 className="text-xs font-semibold text-gray-900">Services</h4>
                 <div className="space-y-3">
                   {selectedServices.map((service, index) => {
-                    const teamMemberId = service.teamMember || "any";
-                    const teamMember = teamMembers.find(tm => tm.id === teamMemberId);
+                    const serviceData = services.find(s => s.id === service.id);
+                    const availableStaff = serviceData?.staff || [];
+                    const firstStaffId = availableStaff.length > 0 ? String(availableStaff[0].id) : null;
+                    const teamMemberId = service.teamMember;
+                    
+                    // If no team member selected or it's the first staff member, treat as "Any Team Member"
+                    const isAnySelected = !teamMemberId || teamMemberId === firstStaffId;
+                    const teamMember = isAnySelected
+                      ? { id: "any", name: "Any Team Member" }
+                      : serviceData?.staff?.find(tm => String(tm.id) === String(teamMemberId));
                     
                     return (
                       <div key={service.id} className="flex items-center gap-3">
@@ -1641,19 +2914,35 @@ function AddBookingSidebar({
                                   <span>{teamMember?.name || "Any Team Member"}</span>
                                   <Arrow direction={openTeamMemberDropdown === service.id ? "up" : "down"} opacity={1} className="w-4" />
                             </button>
-                                {openTeamMemberDropdown === service.id && (
-                                  <div className="absolute left-0 mt-1 bg-white border border-black/10 rounded-lg shadow-lg z-50 min-w-[200px]">
-                                    {teamMembers.map((member) => {
-                                      const isSelected = (service.teamMember || "any") === member.id;
+                                {openTeamMemberDropdown === service.id && (() => {
+                                  const serviceData = services.find(s => s.id === service.id);
+                                  const availableStaff = serviceData?.staff || [];
+                                  const allOptions = [
+                                    { id: "any", name: "Any Team Member", avatar: null },
+                                    ...availableStaff.map(s => ({ id: String(s.id), name: s.name, avatar: s.avatar }))
+                                  ];
+                                  
+                                  return (
+                                  <div 
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="absolute left-0 mt-1 bg-white border border-black/10 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[200px] overflow-y-auto"
+                                  >
+                                      {allOptions.map((member) => {
+                                      const firstStaffId = availableStaff.length > 0 ? String(availableStaff[0].id) : null;
+                                      const currentTeamMember = service.teamMember || firstStaffId || "any";
+                                      // Check if selected is "any" (which is stored as first staff ID)
+                                      const isAnySelected = !service.teamMember || service.teamMember === firstStaffId;
+                                      const isSelected = member.id === "any" ? isAnySelected : (!isAnySelected && currentTeamMember === member.id);
                                       return (
                             <button
                                           key={member.id}
                                           onClick={(e) => {
                                             e.stopPropagation();
+                                            const selectedTeamMemberId = member.id === "any" ? (firstStaffId || undefined) : member.id;
                                             setSelectedServices(prev => 
                                               prev.map(s => 
                                                 s.id === service.id 
-                                                  ? { ...s, teamMember: member.id === "any" ? undefined : member.id }
+                                                  ? { ...s, teamMember: selectedTeamMemberId }
                                                   : s
                                               )
                                             );
@@ -1667,10 +2956,18 @@ function AddBookingSidebar({
                                               <path d="M20.4163 21.6665V19.9752C20.4163 18.9399 19.9503 17.9248 19.0083 17.4953C17.8593 16.9716 16.4813 16.6665 14.9997 16.6665C13.5181 16.6665 12.1401 16.9716 10.9911 17.4953C10.0491 17.9248 9.58301 18.9399 9.58301 19.9752V21.6665" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
                                               <path d="M14.9997 14.1668C16.6105 14.1668 17.9163 12.861 17.9163 11.2502C17.9163 9.63933 16.6105 8.3335 14.9997 8.3335C13.3888 8.3335 12.083 9.63933 12.083 11.2502C12.083 12.861 13.3888 14.1668 14.9997 14.1668Z" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
+                                              ) : (
+                                                member.avatar && typeof member.avatar === 'string' && (member.avatar.startsWith('http') || member.avatar.startsWith('/')) ? (
+                                                  <img 
+                                                    src={member.avatar} 
+                                                    alt={member.name}
+                                                    className="w-7 h-7 rounded-full object-cover"
+                                                  />
                                           ) : (
                                             <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary">
-                                              {member.avatar}
+                                                    {member.name ? member.name.substring(0, 2).toUpperCase() : 'SM'}
                                             </div>
+                                                )
                                           )}
                                           <span className="flex-1 text-left text-xs font-medium text-black">{member.name}</span>
                                           {isSelected && (
@@ -1688,7 +2985,8 @@ function AddBookingSidebar({
                                       );
                                     })}
                           </div>
-                                )}
+                                  );
+                                })()}
                         </div>
                             </div>
                           </div>
@@ -1727,7 +3025,8 @@ function AddBookingSidebar({
                 onClick={() => {
                   if (isAddingNewCustomer) {
                     setIsAddingNewCustomer(false);
-                    setNewCustomer({ firstName: "", lastName: "", phone: "", email: "", countryCode: "+961" });
+                    setNewCustomer({ firstName: "", lastName: "", phone: "", email: "" });
+                    setCurrentStep(1); // Go back to customer selection
                   } else {
                     setCurrentStep(currentStep - 1);
                   }
@@ -1742,8 +3041,8 @@ function AddBookingSidebar({
               <Button
                 variant="primary"
                 onClick={async () => {
-                  // Handle Add New Customer form submission
-                  if (isAddingNewCustomer) {
+                  // Handle Add New Customer form submission (when on step 2)
+                  if (isAddingNewCustomer && currentStep === 2) {
                     // Validate customer form
                     if (!newCustomer.firstName || !newCustomer.lastName || !newCustomer.phone || !newCustomer.email) {
                       alert("Please fill in all required customer fields");
@@ -1756,24 +3055,75 @@ function AddBookingSidebar({
                       return;
                     }
                     
-                    // TODO: Replace with actual API call
-                    // Create customer
-                    const newCustomerData = {
-                      id: `new-${Date.now()}`,
-                      name: `${newCustomer.firstName} ${newCustomer.lastName}`,
-                      email: newCustomer.email,
-                      avatar: newCustomer.firstName.charAt(0).toUpperCase(),
-                    };
-                    
-                    // Select the new customer and proceed to step 3 (Services)
-                    setSelectedCustomer(newCustomerData);
-                    setIsAddingNewCustomer(false);
-                    setNewCustomer({ firstName: "", lastName: "", phone: "", email: "", countryCode: "+961" });
-                    setCurrentStep(3); // Skip to Services since we already have date/time
+                    setIsCreatingCustomer(true);
+                    try {
+                      // Get full phone number with country code from intl-tel-input
+                      let phoneNumber = newCustomer.phone;
+                      if (itiRef.current && phoneInputRef.current) {
+                        const fullNumber = itiRef.current.getNumber();
+                        if (fullNumber) {
+                          phoneNumber = fullNumber;
+                        }
+                      }
+                      
+                      // Call API to create customer
+                      const response = await axiosClient.post('/customers/add', {
+                        first_name: newCustomer.firstName,
+                        last_name: newCustomer.lastName,
+                        email: newCustomer.email,
+                        phone_number: phoneNumber,
+                      });
+                      
+                      // Get the created customer data from response - check multiple possible response structures
+                      const createdCustomer = response.data?.data?.customer || 
+                                             response.data?.data || 
+                                             response.data?.customer || 
+                                             response.data;
+                      
+                      // Transform the customer data to match our format (similar to fetchCustomers transformation)
+                      const firstName = createdCustomer.first_name || newCustomer.firstName;
+                      const lastName = createdCustomer.last_name || newCustomer.lastName;
+                      const fullName = createdCustomer.name || `${firstName} ${lastName}`.trim() || 'Customer';
+                      const email = createdCustomer.email || newCustomer.email;
+                      const customerId = createdCustomer.id || `new-${Date.now()}`;
+                      
+                      // Extract avatar from image object or generate initials
+                      const avatarUrl = createdCustomer.image?.image || createdCustomer.image?.thumb || createdCustomer.avatar || null;
+                      const initials = fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) || 'CU';
+                      
+                      const newCustomerData = {
+                        id: String(customerId),
+                        name: fullName,
+                        email: email,
+                        avatar: avatarUrl || initials,
+                      };
+                      
+                      // Add the new customer to the customers list so it appears when going back to step 1
+                      setCustomers(prevCustomers => {
+                        // Check if customer already exists (avoid duplicates)
+                        const exists = prevCustomers.some(c => c.id === newCustomerData.id || c.email === newCustomerData.email);
+                        if (exists) {
+                          return prevCustomers;
+                        }
+                        // Add new customer at the beginning of the list
+                        return [newCustomerData, ...prevCustomers];
+                      });
+                      
+                      // Select the new customer and proceed to step 3 (Services)
+                      setSelectedCustomer(newCustomerData);
+                      setIsAddingNewCustomer(false);
+                      setNewCustomer({ firstName: "", lastName: "", phone: "", email: "" });
+                      setCurrentStep(3); // Proceed to Services
+                    } catch (error: any) {
+                      console.error("Error creating customer:", error);
+                      alert(error?.response?.data?.message || "Failed to create customer. Please try again.");
+                    } finally {
+                      setIsCreatingCustomer(false);
+                    }
                     return;
                   }
                   
-                  // Regular step validation
+                  // Regular step validation (when not adding new customer)
                   if (currentStep === 2 && !selectedTime) {
                     alert("Please select a time");
                     return;
@@ -1784,20 +3134,59 @@ function AddBookingSidebar({
                   }
                   setCurrentStep(currentStep + 1);
                 }}
+                disabled={isCreatingCustomer}
                 className={isAddingNewCustomer ? "w-full" : "w-[70%] ml-4"}
               >
-                Continue
+                {isCreatingCustomer ? "Creating..." : "Continue"}
               </Button>
           ) : currentStep === 4 ? (
             <Button
               variant="primary"
-              onClick={() => {
+              onClick={async () => {
                 // Handle final booking submission
-                onSave();
+                if (!selectedCustomer || !selectedDate || !selectedTime || selectedServices.length === 0) {
+                  alert("Please complete all booking details");
+                  return;
+                }
+
+                setIsSubmitting(true);
+                try {
+                  // Format date as YYYY-MM-DD
+                  const year = selectedDate.getFullYear();
+                  const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                  const day = String(selectedDate.getDate()).padStart(2, '0');
+                  const formattedDate = `${year}-${month}-${day}`;
+                  
+                  // Combine date and time
+                  const dateTime = `${formattedDate} ${selectedTime}`;
+
+                  // Format services array
+                  const servicesData = selectedServices.map(service => ({
+                    service_id: service.id,
+                    staff_id: service.teamMember || null
+                  }));
+
+                  // Create booking payload
+                  const bookingData = {
+                    branch_id: currentBranch?.id,
+                    customer_id: selectedCustomer.id,
+                    date: dateTime,
+                    services: servicesData
+                  };
+
+                  await axiosClient.post('/bookings/add', bookingData);
+                  onSave(selectedCustomer.name);
+                } catch (error: any) {
+                  console.error("Error creating booking:", error);
+                  alert(error?.response?.data?.message || "Failed to create booking. Please try again.");
+                } finally {
+                  setIsSubmitting(false);
+                }
               }}
+              disabled={isSubmitting}
               className="w-[70%] ml-4"
             >
-              Add Booking
+              {isSubmitting ? "Adding..." : "Add Booking"}
             </Button>
           ) : null}
           </div>
