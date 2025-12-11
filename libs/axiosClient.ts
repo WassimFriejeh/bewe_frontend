@@ -8,6 +8,72 @@ if (typeof window !== "undefined") {
   console.log("API Key:", process.env.NEXT_PUBLIC_API_SECRET_KEY ? "✅ SET" : "❌ NOT SET");
 }
 
+// Helper function to safely get property value
+const safeGet = (obj: any, path: string, defaultValue: any = undefined) => {
+  try {
+    const keys = path.split('.');
+    let result = obj;
+    for (const key of keys) {
+      if (result == null) return defaultValue;
+      result = result[key];
+    }
+    return result ?? defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
+
+// Helper function to safely serialize error info
+const safeSerializeErrorInfo = (error: any) => {
+  const info: any = {};
+  
+  try {
+    info.status = safeGet(error, 'response.status');
+    info.statusText = safeGet(error, 'response.statusText');
+    info.url = safeGet(error, 'config.url') || safeGet(error, 'request.responseURL');
+    
+    // Safely handle method - ensure it's a string before calling toUpperCase
+    const method = safeGet(error, 'config.method');
+    info.method = method && typeof method === 'string' ? method.toUpperCase() : method;
+    
+    info.baseURL = safeGet(error, 'config.baseURL');
+    info.message = safeGet(error, 'message');
+    info.code = safeGet(error, 'code');
+    
+    // Try to safely get response data
+    try {
+      const responseData = safeGet(error, 'response.data');
+      if (responseData !== undefined && responseData !== null) {
+        try {
+          info.responseData = JSON.parse(JSON.stringify(responseData));
+        } catch {
+          try {
+            info.responseData = String(responseData);
+          } catch {
+            info.responseData = '[Unable to serialize response data]';
+          }
+        }
+      }
+    } catch {
+      info.responseData = '[Unable to extract response data]';
+    }
+    
+    // Construct full URL safely
+    try {
+      const baseURL = String(info.baseURL || '');
+      const url = String(info.url || '');
+      info.fullURL = baseURL && url ? `${baseURL}${url}` : (url || baseURL || 'Unknown URL');
+    } catch {
+      info.fullURL = 'Unknown URL';
+    }
+  } catch {
+    // If anything fails, return minimal info
+    info.error = 'Error serialization failed';
+  }
+  
+  return info;
+};
+
 const axiosClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   headers: {
@@ -23,7 +89,9 @@ axiosClient.interceptors.request.use(
   (config) => {
     // Handle FormData - remove Content-Type header so browser can set it with boundary
     if (config.data instanceof FormData) {
-      config.headers = config.headers || {};
+      if (!config.headers) {
+        config.headers = {} as any;
+      }
       delete (config.headers as any)['Content-Type'];
     }
     
@@ -33,7 +101,9 @@ axiosClient.interceptors.request.use(
     if (token) {
       // Ensure Authorization header is set with Bearer token
       const bearerToken = `Bearer ${token.trim()}`; // Trim any whitespace
-      config.headers = config.headers || {};
+      if (!config.headers) {
+        config.headers = {} as any;
+      }
       config.headers['Authorization'] = bearerToken;
       
       console.log("🔑 Setting Authorization header:", bearerToken.substring(0, 30) + "...");
@@ -117,40 +187,33 @@ axiosClient.interceptors.response.use(
   (error) => {
     // Log error responses
     if (typeof window !== "undefined") {
-      const errorInfo: any = {};
-      
-      // Extract error information
-      if (error?.response) {
-        errorInfo.status = error.response.status;
-        errorInfo.statusText = error.response.statusText;
-        errorInfo.responseData = error.response.data;
-      }
-      
-      if (error?.config) {
-        errorInfo.url = error.config.url;
-        errorInfo.method = error.config.method?.toUpperCase();
-        errorInfo.baseURL = error.config.baseURL;
-        errorInfo.fullURL = `${error.config.baseURL}${error.config.url}`;
-      } else if (error?.request) {
-        errorInfo.url = error.request.responseURL;
-      }
-      
-      if (error?.message) {
-        errorInfo.message = error.message;
-      }
-      
-      if (error?.code) {
-        errorInfo.code = error.code;
-      }
-      
-      // Always log the structured info, and also log the full error for debugging
-      console.error("📥 API Error Response:", errorInfo);
-      
-      // Also log the full error object for complete debugging
-      if (Object.keys(errorInfo).length === 0 || Object.values(errorInfo).every(val => val === undefined || val === null || val === '')) {
-        console.error("📥 API Error (Full Error Object):", error);
-        console.error("📥 API Error (Error Type):", typeof error);
-        console.error("📥 API Error (Error Keys):", Object.keys(error || {}));
+      try {
+        const errorInfo = safeSerializeErrorInfo(error);
+        const requestUrl = errorInfo.url || '';
+        
+        // Special handling for bookings/get/by/day - less verbose logging since it's called frequently
+        if (requestUrl.includes('/bookings/get/by/day')) {
+          // Only log if it's not a 404 or other expected errors
+          if (errorInfo.status && errorInfo.status !== 404) {
+            console.warn("📥 Calendar API Error:", {
+              status: errorInfo.status,
+              statusText: errorInfo.statusText,
+              message: errorInfo.message
+            });
+          }
+        } else {
+          // Full error logging for other endpoints
+          console.error("📥 API Error Response:", errorInfo);
+          
+          // If no useful info was extracted, log basic error details
+          const hasInfo = Object.values(errorInfo).some(val => val !== undefined && val !== null && val !== '');
+          if (!hasInfo) {
+            console.error("📥 API Error occurred (unable to extract details)");
+          }
+        }
+      } catch (logError) {
+        // Fallback if anything fails
+        console.error("📥 API Error occurred but could not be logged safely");
       }
     }
     

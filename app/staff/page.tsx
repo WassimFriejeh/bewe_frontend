@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useBranch } from "../../contexts/BranchContext";
 import { hasPermission, getUserPermissions } from "../../utils/permissions";
 import axiosClient from "../../libs/axiosClient";
@@ -57,13 +57,7 @@ export default function Staff() {
   const canEditStaff = contextPermissions.includes("Edit Staff");
   const canDeleteStaff = contextPermissions.includes("Delete Staff");
 
-  useEffect(() => {
-    if (currentBranch) {
-      fetchStaffMembers();
-    }
-  }, [currentBranch?.id, branchChangeKey]);
-
-  const fetchStaffMembers = async () => {
+  const fetchStaffMembers = useCallback(async () => {
     if (!currentBranch) return;
 
     setIsLoading(true);
@@ -120,7 +114,13 @@ export default function Staff() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentBranch]);
+
+  useEffect(() => {
+    if (currentBranch) {
+      fetchStaffMembers();
+    }
+  }, [currentBranch?.id, branchChangeKey, fetchStaffMembers]);
 
   const handleRowClick = (member: StaffMember) => {
     setStaffToEdit(member);

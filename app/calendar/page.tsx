@@ -56,11 +56,19 @@ interface PendingBooking {
   [key: string]: any; // Allow additional properties from API
 }
 
+interface WorkingHours {
+  day: number; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  start_time?: string; // e.g., "09:00"
+  end_time?: string; // e.g., "17:00"
+  is_working?: boolean; // Whether they work on this day
+}
+
 interface StaffMember {
   id: string;
   name: string;
   avatar?: string;
   calendarColor?: string;
+  working_hours?: WorkingHours[]; // Array of working hours for each day
 }
 
 export default function Calendar() {
@@ -107,36 +115,441 @@ export default function Calendar() {
   const [isBookingSidebarOpen, setIsBookingSidebarOpen] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [selectedBookingDate, setSelectedBookingDate] = useState<Date | null>(null);
+  const [selectedBookingTime, setSelectedBookingTime] = useState<string | null>(null);
 
   // Use permissions from context (they update automatically when branch changes)
-  const canAddBooking = contextPermissions.includes("Add Booking");
-  const canViewAllBookings = contextPermissions.includes("View All Bookings");
-  const canViewOwnBookings = contextPermissions.includes("View Own Bookings");
-  const canEditBooking = contextPermissions.includes("Edit Booking");
+  // Ensure contextPermissions is always an array to prevent errors
+  const safePermissions = Array.isArray(contextPermissions) ? contextPermissions : [];
+  const canAddBooking = safePermissions.includes("Add Booking");
+  const canViewAllBookings = safePermissions.includes("View All Bookings");
+  const canViewOwnBookings = safePermissions.includes("View Own Bookings");
+  const canEditBooking = safePermissions.includes("Edit Booking");
   
   console.log("Calendar - Current permissions:", contextPermissions);
   console.log("Calendar - Can add booking:", canAddBooking);
 
+  // Fetch a single staff member by ID (for when a specific staff is selected)
+  const fetchSingleStaffMember = async (staffId: string) => {
+    if (!currentBranch) return;
+
+    try {
+      const response = await axiosClient.get("/staff/get", {
+        params: { 
+          branch_id: currentBranch.id,
+          staff_id: staffId 
+        },
+      });
+      
+      const staffData = response.data?.data?.staff || [];
+      
+      if (staffData.length > 0) {
+        const member = staffData[0];
+        const firstName = member.first_name || "";
+        const lastName = member.last_name || "";
+        const fullName = `${firstName} ${lastName}`.trim() || "Staff Member";
+        
+        const avatarUrl = (member.image?.image && member.image.image.trim() !== "")
+          ? member.image.image
+          : null;
+        
+        // Helper function to convert day string to number (0=Sunday, 1=Monday, etc.)
+        const dayStringToNumber = (day: string | number): number => {
+          if (typeof day === 'number') return day;
+          const dayMap: { [key: string]: number } = {
+            'sunday': 0, 'sun': 0,
+            'monday': 1, 'mon': 1,
+            'tuesday': 2, 'tue': 2, 'tues': 2,
+            'wednesday': 3, 'wed': 3,
+            'thursday': 4, 'thu': 4, 'thur': 4, 'thurs': 4,
+            'friday': 5, 'fri': 5,
+            'saturday': 6, 'sat': 6
+          };
+          return dayMap[day.toLowerCase()] ?? 0;
+        };
+
+        // Extract working hours
+        let workingHours: WorkingHours[] = [];
+        if (member.working_hours && Array.isArray(member.working_hours)) {
+          workingHours = member.working_hours.map((wh: any) => ({
+            day: dayStringToNumber(wh.day !== undefined ? wh.day : (wh.day_of_week !== undefined ? wh.day_of_week : 0)),
+            start_time: wh.from || wh.start_time || wh.startTime || wh.start,
+            end_time: wh.to || wh.end_time || wh.endTime || wh.end,
+            is_working: true,
+          }));
+        } else if (member.schedule && Array.isArray(member.schedule)) {
+          workingHours = member.schedule.map((sched: any) => ({
+            day: dayStringToNumber(sched.day !== undefined ? sched.day : (sched.day_of_week !== undefined ? sched.day_of_week : 0)),
+            start_time: sched.from || sched.start_time || sched.startTime || sched.start,
+            end_time: sched.to || sched.end_time || sched.endTime || sched.end,
+            is_working: true,
+          }));
+        } else if (member.availability && Array.isArray(member.availability)) {
+          workingHours = member.availability.map((avail: any) => ({
+            day: dayStringToNumber(avail.day !== undefined ? avail.day : (avail.day_of_week !== undefined ? avail.day_of_week : 0)),
+            start_time: avail.from || avail.start_time || avail.startTime || avail.start,
+            end_time: avail.to || avail.end_time || avail.endTime || avail.end,
+            is_working: true,
+          }));
+        }
+        
+        const updatedStaff: StaffMember = {
+          id: String(member.id),
+          name: fullName,
+          avatar: avatarUrl,
+          calendarColor: member.calendar_color || "#9CA3AF",
+          working_hours: workingHours.length > 0 ? workingHours : undefined,
+        };
+
+        // Update only this staff member in the list, keeping all others
+        setStaffMembers(prev => 
+          prev.map(staff => staff.id === staffId ? updatedStaff : staff)
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching single staff member:", error);
+    }
+  };
+
+  // Helper function to safely format date to YYYY-MM-DD (using local time, not UTC)
+  const formatDateToString = (date: Date | string | null | undefined): string | null => {
+    try {
+      if (!date) return null;
+      
+      // If it's already a date string in YYYY-MM-DD format, return it directly
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return date;
+      }
+      
+      // Ensure we have a Date object
+      let dateObj: Date;
+      if (date instanceof Date) {
+        dateObj = date;
+      } else {
+        // For date strings with time, parse normally
+        // For date-only strings (YYYY-MM-DD), parse as local date to avoid timezone issues
+        if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+          const [year, month, day] = date.trim().split('-').map(Number);
+          dateObj = new Date(year, month - 1, day);
+        } else {
+          dateObj = new Date(date);
+        }
+      }
+      
+      // Validate the date
+      if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+        return null;
+      }
+      
+      // Use local date components to avoid timezone issues
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.warn("Error formatting date:", error, date);
+      return null;
+    }
+  };
+
+  const fetchAllBookingsForCalendar = useCallback(async () => {
+    if (!currentBranch) return;
+
+    try {
+      let dates: Date[] = [];
+      
+      if (calendarView === "day") {
+        dates = [new Date(currentDate)];
+      } else if (calendarView === "week") {
+        // Get all 7 days of the week
+        const dayOfWeek = currentDate.getDay();
+        const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Monday as first day
+        const weekStart = new Date(currentDate);
+        weekStart.setDate(diff);
+        
+        for (let i = 0; i < 7; i++) {
+          const day = new Date(weekStart);
+          day.setDate(weekStart.getDate() + i);
+          dates.push(day);
+        }
+      } else { // month
+        // Get all days in the month
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        for (let i = 1; i <= daysInMonth; i++) {
+          dates.push(new Date(year, month, i));
+        }
+      }
+
+      // Batch requests to avoid overwhelming the backend
+      // Process requests in chunks of 5 at a time
+      const batchSize = 5;
+      const allBookingsData: any[] = [];
+      
+      for (let i = 0; i < dates.length; i += batchSize) {
+        const batch = dates.slice(i, i + batchSize);
+        const batchPromises = batch.map(date => {
+          const dateStr = formatDateToString(date);
+          if (!dateStr) {
+            // Skip invalid dates
+            return Promise.resolve([]);
+          }
+          
+          const params: any = {
+            branch_id: currentBranch.id,
+            date: dateStr, // YYYY-MM-DD format
+          };
+
+          if (filters.team !== "all") {
+            params.team_member = filters.team;
+          }
+
+          if (filters.status !== "all") {
+            params.status = filters.status.toLowerCase();
+          }
+
+          return axiosClient.get("/bookings/get/by/day", { 
+            params,
+            timeout: 15000 // Increase timeout to 15 seconds for calendar requests
+          })
+            .then(response => {
+              const data = response.data.data || response.data;
+              const bookings = data.bookings || data || [];
+              
+              // Debug: Log raw API response structure
+              if (bookings.length > 0) {
+                console.log(`[API Response for ${params.date}] Raw booking structure:`, {
+                  keys: Object.keys(bookings[0]),
+                  hasStaff: !!bookings[0].staff,
+                  hasStaffId: !!(bookings[0].staff_id || bookings[0].staffId),
+                  staffType: typeof bookings[0].staff,
+                  staffValue: bookings[0].staff,
+                  scheduledOnField: bookings[0].scheduledOn || bookings[0].scheduled_on || bookings[0].date,
+                });
+              }
+              
+              // Normalize booking data - handle both snake_case and camelCase
+              if (!Array.isArray(bookings)) {
+                console.warn("Bookings is not an array:", bookings);
+                return [];
+              }
+              
+              // Flatten bookings: if a booking has multiple services with different staff, create separate entries
+              const normalizedBookings: any[] = [];
+              
+              bookings.forEach((booking: any) => {
+                // Normalize scheduledOn field (use 'date' field from your API)
+                const scheduledOn = booking.scheduledOn || booking.scheduled_on || booking.date || booking.scheduled_at;
+                
+                // Normalize customer field
+                let customer = booking.customer;
+                if (customer && typeof customer === 'object') {
+                  // Extract name from first_name and last_name
+                  const firstName = customer.first_name || '';
+                  const lastName = customer.last_name || '';
+                  const fullName = `${firstName} ${lastName}`.trim() || customer.name || 'Customer';
+                  
+                  customer = {
+                    ...customer,
+                    id: String(customer.id || customer.customer_id || ''),
+                    name: fullName,
+                    avatar: customer.image?.image || customer.avatar || customer.customer_avatar,
+                  };
+                } else if (booking.customer_id || booking.customerId) {
+                  customer = {
+                    id: String(booking.customer_id || booking.customerId),
+                    name: booking.customer_name || booking.customerName || 'Customer',
+                    avatar: booking.customer?.avatar || booking.customer_avatar,
+                  };
+                } else {
+                  customer = { id: '', name: 'Customer' };
+                }
+                
+                // Handle services array - extract staff from each service
+                const services = booking.services || [];
+                
+                if (services.length === 0) {
+                  // No services, create a booking with empty staff
+                  normalizedBookings.push({
+                    ...booking,
+                    id: String(booking.id),
+                    bookingId: String(booking.id),
+                    scheduledOn,
+                    staff: { id: '', name: 'Staff' },
+                    customer,
+                    service: 'No service',
+                    duration: booking.duration || 60,
+                    payment: booking.payment || '',
+                    status: booking.status || 'pending',
+                  });
+                } else {
+                  // Parse the booking date to get the base start time
+                  const baseDate = new Date(scheduledOn);
+                  
+                  // Create one booking entry per service (not grouped by staff)
+                  // This allows multiple services with the same staff to be displayed as sequential time slots
+                  let cumulativeDuration = 0; // Track cumulative duration for calculating start times
+                  
+                  services.forEach((service: any, serviceIndex: number) => {
+                    const staffId = String(service.staff_id || service.staffId || '');
+                    const serviceId = String(service.service_id || '');
+                    
+                    // Get duration from service (could be string or number)
+                    const serviceDuration = service.duration 
+                      ? (typeof service.duration === 'string' ? parseInt(service.duration, 10) : service.duration)
+                      : (service.duration_minutes || 30); // Default 30 min if not provided
+                    
+                    // Service name - use service ID or a default
+                    const serviceName = serviceId ? `Service ${serviceId}` : 'Service';
+                    
+                    // Calculate the actual start time for this service
+                    // First service starts at the base booking time, subsequent services start after previous ones
+                    const serviceStartTime = new Date(baseDate);
+                    serviceStartTime.setMinutes(serviceStartTime.getMinutes() + cumulativeDuration);
+                    
+                    // Reconstruct full datetime string with time component (matching API format: "YYYY-MM-DD HH:mm:ss")
+                    const year = serviceStartTime.getFullYear();
+                    const month = String(serviceStartTime.getMonth() + 1).padStart(2, '0');
+                    const day = String(serviceStartTime.getDate()).padStart(2, '0');
+                    const hours = String(serviceStartTime.getHours()).padStart(2, '0');
+                    const minutes = String(serviceStartTime.getMinutes()).padStart(2, '0');
+                    const seconds = String(serviceStartTime.getSeconds()).padStart(2, '0');
+                    const adjustedScheduledOnFull = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                    
+                    normalizedBookings.push({
+                      ...booking,
+                      id: `${booking.id}-${staffId}-${serviceIndex}`, // Unique ID per service
+                      bookingId: String(booking.id),
+                      scheduledOn: adjustedScheduledOnFull, // Use adjusted start time
+                      staff: {
+                        id: staffId,
+                        name: 'Staff', // Will be matched with staffMembers later
+                        avatar: undefined,
+                      },
+                      customer,
+                      service: serviceName,
+                      duration: serviceDuration, // Individual service duration
+                      payment: booking.payment || '',
+                      status: booking.status || 'pending',
+                      services: [service], // Store this individual service
+                      serviceIndex: serviceIndex, // Index to maintain order
+                    });
+                    
+                    // Add this service's duration to cumulative for next service
+                    cumulativeDuration += serviceDuration;
+                  });
+                }
+              });
+              
+              // Debug: Log normalization result
+              if (normalizedBookings.length > 0) {
+                console.log(`[Normalized] Created ${normalizedBookings.length} booking entries from ${bookings.length} raw bookings`);
+                console.log(`[Normalized] Sample booking:`, {
+                  id: normalizedBookings[0].id,
+                  scheduledOn: normalizedBookings[0].scheduledOn,
+                  staff: normalizedBookings[0].staff,
+                  customer: normalizedBookings[0].customer,
+                  service: normalizedBookings[0].service,
+                });
+              }
+              
+              return normalizedBookings;
+            })
+            .catch(error => {
+              console.error(`Error fetching bookings for ${params.date}:`, error);
+              return [];
+            });
+        });
+
+        // Wait for this batch to complete before moving to the next
+        const batchResults = await Promise.all(batchPromises);
+        allBookingsData.push(...batchResults.flat());
+      }
+      
+      console.log("=== CALENDAR BOOKINGS SUMMARY ===");
+      console.log("Total bookings fetched:", allBookingsData.length);
+      if (allBookingsData.length > 0) {
+        console.log("Sample normalized booking:", {
+          id: allBookingsData[0].id,
+          scheduledOn: allBookingsData[0].scheduledOn,
+          staff: allBookingsData[0].staff,
+          customer: allBookingsData[0].customer,
+          service: allBookingsData[0].service,
+        });
+        
+        // Check staff ID consistency
+        const staffIds = [...new Set(allBookingsData.map((b: any) => b.staff?.id).filter(Boolean))];
+        console.log("Unique staff IDs in bookings:", staffIds);
+        console.log("Staff members loaded:", staffMembers.map(s => ({ id: s.id, name: s.name })));
+        
+        // Match staff names from staffMembers
+        staffIds.forEach(staffId => {
+          const staffMember = staffMembers.find(s => String(s.id) === String(staffId));
+          if (staffMember) {
+            console.log(`✅ Staff ID "${staffId}" matched to: ${staffMember.name}`);
+          } else {
+            console.warn(`⚠️ Staff ID "${staffId}" NOT FOUND in staff members list`);
+          }
+        });
+        
+        // Check for ID mismatches
+        const bookingStaffIds = new Set(staffIds.map(String));
+        const memberStaffIds = new Set(staffMembers.map(s => String(s.id)));
+        const missingInMembers = [...bookingStaffIds].filter(id => !memberStaffIds.has(id));
+        const missingInBookings = [...memberStaffIds].filter(id => !bookingStaffIds.has(id));
+        
+        if (missingInMembers.length > 0) {
+          console.warn("⚠️ Staff IDs in bookings but NOT in staff members:", missingInMembers);
+          console.warn("   These bookings will NOT display on the calendar!");
+        }
+        if (missingInBookings.length > 0) {
+          console.log("ℹ️ Staff members with no bookings:", missingInBookings);
+        }
+      } else {
+        console.log("❌ No bookings fetched. Check API response structure.");
+      }
+      console.log("=================================");
+      setAllBookings(allBookingsData);
+    } catch (error) {
+      console.error("Error fetching calendar bookings:", error);
+      setAllBookings([]);
+    }
+  }, [currentBranch, calendarView, currentDate, filters.team, filters.status, staffMembers]);
+
+  // Fetch staff members - only when branch changes, not when filters change
+  // This ensures all staff are always available in the dropdown
   useEffect(() => {
     if (currentBranch) {
+      fetchStaffMembers();
+    }
+  }, [currentBranch?.id, branchChangeKey]);
+
+  // Fetch bookings for list view - only when branch, filters, page, or permissions change
+  useEffect(() => {
+    if (currentBranch && view === "list") {
       // Reset pagination when branch changes
       if (branchChangeKey > 0) {
         setCurrentPage(1);
       }
       fetchBookings();
-      fetchPendingBookings();
-      fetchStaffMembers();
-      if (view === "calendar") {
-        fetchAllBookingsForCalendar();
-      }
     }
   }, [currentBranch?.id, branchChangeKey, filters, currentPage, canViewAllBookings, view]);
 
+  // Fetch pending bookings - only when branch changes (not when filters change)
+  useEffect(() => {
+    if (currentBranch) {
+      fetchPendingBookings();
+    }
+  }, [currentBranch?.id, branchChangeKey]);
+
+  // Fetch bookings for calendar view - only when calendar-specific dependencies change
   useEffect(() => {
     if (view === "calendar" && currentBranch) {
       fetchAllBookingsForCalendar();
     }
-  }, [currentDate, calendarView, currentBranch?.id, filters.team, filters.status]);
+  }, [view, currentBranch, fetchAllBookingsForCalendar]);
 
   // Persist view state to localStorage
   useEffect(() => {
@@ -156,6 +569,7 @@ export default function Calendar() {
     if (!currentBranch) return;
     
     setIsLoading(true);
+
     try {
       const params: any = {
         branch_id: currentBranch.id,
@@ -176,11 +590,16 @@ export default function Calendar() {
       }
 
       if (filters.date === "today") {
-        params.date = new Date().toISOString().split("T")[0];
+        const todayStr = formatDateToString(new Date());
+        if (todayStr) {
+          params.date = todayStr;
+        }
       }
 
-      // Determine which endpoint to use based on permissions
-      const endpoint = canViewAllBookings ? "/bookings" : "/bookings/my";
+      // Always use "/bookings" endpoint
+      const endpoint = "/bookings";
+
+      console.log("Fetching bookings from endpoint:", endpoint, "canViewAllBookings:", canViewAllBookings);
 
       const response = await axiosClient.get(endpoint, { params });
       
@@ -190,7 +609,6 @@ export default function Calendar() {
       setTotalBookings(data.total || data.bookings?.length || 0);
       setTotalPages(data.last_page || Math.ceil((data.total || 0) / 12) || 1);
     } catch (error) {
-      console.error("Error fetching bookings:", error);
       setBookings([]);
     } finally {
       setIsLoading(false);
@@ -229,12 +647,17 @@ export default function Calendar() {
   };
 
   const fetchStaffMembers = async () => {
-    if (!currentBranch) return;
+    if (!currentBranch || !currentBranch.id) return;
 
     try {
-      const response = await axiosClient.get("/staff/get", {
-        params: { branch_id: currentBranch.id },
-      });
+      const params: { branch_id: number } = { 
+        branch_id: typeof currentBranch.id === 'string' ? parseInt(currentBranch.id, 10) : currentBranch.id 
+      };
+      
+      // Always fetch all staff members - don't filter by team here
+      // The team filter should only be used for filtering bookings, not staff list
+      
+      const response = await axiosClient.get("/staff/get", { params });
       
       const staffData = response.data?.data?.staff || [];
       
@@ -247,11 +670,54 @@ export default function Calendar() {
           ? member.image.image
           : null;
         
+        // Helper function to convert day string to number (0=Sunday, 1=Monday, etc.)
+        const dayStringToNumber = (day: string | number): number => {
+          if (typeof day === 'number') return day;
+          const dayMap: { [key: string]: number } = {
+            'sunday': 0, 'sun': 0,
+            'monday': 1, 'mon': 1,
+            'tuesday': 2, 'tue': 2, 'tues': 2,
+            'wednesday': 3, 'wed': 3,
+            'thursday': 4, 'thu': 4, 'thur': 4, 'thurs': 4,
+            'friday': 5, 'fri': 5,
+            'saturday': 6, 'sat': 6
+          };
+          return dayMap[day.toLowerCase()] ?? 0;
+        };
+
+        // Extract working hours - handle different possible API response formats
+        let workingHours: WorkingHours[] = [];
+        if (member.working_hours && Array.isArray(member.working_hours)) {
+          workingHours = member.working_hours.map((wh: any) => ({
+            day: dayStringToNumber(wh.day !== undefined ? wh.day : (wh.day_of_week !== undefined ? wh.day_of_week : 0)),
+            start_time: wh.from || wh.start_time || wh.startTime || wh.start,
+            end_time: wh.to || wh.end_time || wh.endTime || wh.end,
+            is_working: true, // If entry exists, they work that day
+          }));
+        } else if (member.schedule && Array.isArray(member.schedule)) {
+          // Alternative format: schedule array
+          workingHours = member.schedule.map((sched: any) => ({
+            day: dayStringToNumber(sched.day !== undefined ? sched.day : (sched.day_of_week !== undefined ? sched.day_of_week : 0)),
+            start_time: sched.from || sched.start_time || sched.startTime || sched.start,
+            end_time: sched.to || sched.end_time || sched.endTime || sched.end,
+            is_working: true,
+          }));
+        } else if (member.availability && Array.isArray(member.availability)) {
+          // Another alternative format: availability array
+          workingHours = member.availability.map((avail: any) => ({
+            day: dayStringToNumber(avail.day !== undefined ? avail.day : (avail.day_of_week !== undefined ? avail.day_of_week : 0)),
+            start_time: avail.from || avail.start_time || avail.startTime || avail.start,
+            end_time: avail.to || avail.end_time || avail.endTime || avail.end,
+            is_working: true,
+          }));
+        }
+        
         return {
           id: String(member.id),
           name: fullName,
           avatar: avatarUrl,
           calendarColor: member.calendar_color || "#9CA3AF",
+          working_hours: workingHours.length > 0 ? workingHours : undefined,
         };
       });
 
@@ -262,74 +728,6 @@ export default function Calendar() {
       console.error("Error fetching staff members:", error);
       setStaffMembers([]);
       setStaffScrollIndex(0);
-    }
-  };
-
-  const fetchAllBookingsForCalendar = async () => {
-    if (!currentBranch) return;
-
-    try {
-      let dates: Date[] = [];
-      
-      if (calendarView === "day") {
-        dates = [new Date(currentDate)];
-      } else if (calendarView === "week") {
-        // Get all 7 days of the week
-        const dayOfWeek = currentDate.getDay();
-        const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Monday as first day
-        const weekStart = new Date(currentDate);
-        weekStart.setDate(diff);
-        
-        for (let i = 0; i < 7; i++) {
-          const day = new Date(weekStart);
-          day.setDate(weekStart.getDate() + i);
-          dates.push(day);
-        }
-      } else { // month
-        // Get all days in the month
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
-        for (let i = 1; i <= daysInMonth; i++) {
-          dates.push(new Date(year, month, i));
-        }
-      }
-
-      // Make parallel API calls for each date
-      const promises = dates.map(date => {
-        const params: any = {
-          branch_id: currentBranch.id,
-          date: date.toISOString().split("T")[0], // YYYY-MM-DD format
-        };
-
-        if (filters.team !== "all") {
-          params.team_member = filters.team;
-        }
-
-        if (filters.status !== "all") {
-          params.status = filters.status.toLowerCase();
-        }
-
-        return axiosClient.get("/bookings/get/by/day", { params })
-          .then(response => {
-            const data = response.data.data || response.data;
-            return data.bookings || data || [];
-          })
-          .catch(error => {
-            console.error(`Error fetching bookings for ${params.date}:`, error);
-            return [];
-          });
-      });
-
-      // Wait for all requests to complete and aggregate results
-      const results = await Promise.all(promises);
-      const allBookingsData = results.flat();
-      
-      setAllBookings(allBookingsData);
-    } catch (error) {
-      console.error("Error fetching calendar bookings:", error);
-      setAllBookings([]);
     }
   };
 
@@ -434,28 +832,50 @@ export default function Calendar() {
 
   const getTimeSlots = () => {
     const slots = [];
-    // Generate slots every 1.5 hours (90 minutes) from 8:00 AM to 8:00 PM
-    for (let hour = 8; hour <= 20; hour += 1.5) {
-      const h = Math.floor(hour);
-      const m = (hour % 1) * 60;
+    // Generate slots every 1 hour (60 minutes) from 8:00 AM to 8:00 PM
+    for (let hour = 8; hour <= 20; hour++) {
       const date = new Date();
-      date.setHours(h, m, 0, 0);
+      date.setHours(hour, 0, 0, 0);
       
       // Format as 12-hour with AM/PM
       const timeString = date.toLocaleTimeString("en-US", {
         hour: "numeric",
-        minute: m === 0 ? undefined : "2-digit",
+        minute: "2-digit",
         hour12: true,
       });
       
       slots.push({
         display: timeString,
-        hour: h,
-        minute: m,
-        totalMinutes: h * 60 + m,
+        hour: hour,
+        minute: 0,
+        totalMinutes: hour * 60,
       });
     }
     return slots;
+  };
+
+  // Generate 15-minute clickable slots for empty areas
+  const get15MinuteSlots = (hour: number) => {
+    const slots = [];
+    for (let min = 0; min < 60; min += 15) {
+      slots.push({
+        hour: hour,
+        minute: min,
+        totalMinutes: hour * 60 + min,
+      });
+    }
+    return slots;
+  };
+
+  // Format time for 15-minute slots
+  const format15MinTime = (hour: number, minute: number): string => {
+    const date = new Date();
+    date.setHours(hour, minute, 0, 0);
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   };
 
   const formatTime12Hour = (date: Date) => {
@@ -516,15 +936,135 @@ export default function Calendar() {
     return days;
   };
 
+  // Helper function to check if a staff member works on a specific day
+  const doesStaffWorkOnDay = (staff: StaffMember, date: Date): boolean => {
+    // If no working hours data, assume they work all days (backward compatibility)
+    if (!staff.working_hours || staff.working_hours.length === 0) {
+      return true;
+    }
+    
+    // Get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+    const dayOfWeek = date.getDay();
+    
+    // Find working hours for this day - if entry exists, they work that day
+    const dayWorkingHours = staff.working_hours.find(wh => wh.day === dayOfWeek);
+    
+    // If entry exists for this day, they work (since we set is_working=true for all entries)
+    return dayWorkingHours !== undefined;
+  };
+
+  // Helper function to get filtered staff members for a specific date
+  const getFilteredStaffForDate = (date: Date): StaffMember[] => {
+    let filtered = staffMembers.filter(staff => doesStaffWorkOnDay(staff, date));
+    
+    // If a specific team member is selected, show only that staff member
+    if (filters.team !== "all") {
+      filtered = filtered.filter(staff => String(staff.id) === String(filters.team));
+    }
+    
+    return filtered;
+  };
+
+  // Helper function to get filtered staff members for multiple dates (week/month view)
+  const getFilteredStaffForDates = (dates: Date[]): StaffMember[] => {
+    // Get all unique staff IDs that work on at least one of the dates
+    const workingStaffIds = new Set<string>();
+    
+    dates.forEach(date => {
+      staffMembers.forEach(staff => {
+        if (doesStaffWorkOnDay(staff, date)) {
+          workingStaffIds.add(staff.id);
+        }
+      });
+    });
+    
+    // Return staff members that work on at least one of the dates
+    let filtered = staffMembers.filter(staff => workingStaffIds.has(staff.id));
+    
+    // If a specific team member is selected, show only that staff member
+    if (filters.team !== "all") {
+      filtered = filtered.filter(staff => String(staff.id) === String(filters.team));
+    }
+    
+    return filtered;
+  };
+
+  // Reset staff scroll index when date changes, team filter changes, or when filtered staff length changes
+  useEffect(() => {
+    const filteredStaff = getFilteredStaffForDate(currentDate);
+    const maxScrollIndex = Math.max(0, filteredStaff.length - 3);
+    setStaffScrollIndex(prev => {
+      if (prev > maxScrollIndex) {
+        return Math.max(0, maxScrollIndex);
+      }
+      return prev;
+    });
+  }, [currentDate, staffMembers, filters.team]);
+
   const getBookingsForSlot = (date: Date, staffId?: string) => {
-    const dateStr = date.toISOString().split("T")[0];
-    return allBookings.filter(booking => {
-      const bookingDate = new Date(booking.scheduledOn);
-      const bookingDateStr = bookingDate.toISOString().split("T")[0];
+    // Validate input date
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      return [];
+    }
+    
+    const dateStr = formatDateToString(date);
+    if (!dateStr) {
+      return [];
+    }
+    
+    const filtered = allBookings.filter(booking => {
+      // Handle both snake_case and camelCase from API
+      const scheduledOn = booking.scheduledOn || (booking as any).scheduled_on || (booking as any).date;
+      if (!scheduledOn) return false;
+      
+      const bookingDateStr = formatDateToString(scheduledOn);
+      if (!bookingDateStr) {
+        return false;
+      }
+      
       const matchesDate = bookingDateStr === dateStr;
-      const matchesStaff = !staffId || booking.staff.id === staffId;
+      
+      // Compare staff IDs, handling both string and number types
+      const bookingStaffId = booking.staff?.id ? String(booking.staff.id) : null;
+      const searchStaffId = staffId ? String(staffId) : null;
+      const matchesStaff = !searchStaffId || bookingStaffId === searchStaffId;
+      
+      // Debug: Log why bookings are filtered out
+      if (!matchesDate && bookingDateStr) {
+        // Only log date mismatches occasionally to avoid spam
+        if (Math.random() < 0.01) { // 1% chance
+          console.log(`Date mismatch: calendar="${dateStr}" vs booking="${bookingDateStr}"`);
+        }
+      }
+      
+      if (!matchesStaff && searchStaffId && bookingStaffId) {
+        // Log staff ID mismatches
+        console.warn(`Staff ID mismatch: looking for "${searchStaffId}" (type: ${typeof searchStaffId}), found "${bookingStaffId}" (type: ${typeof bookingStaffId})`, {
+          bookingId: booking.id,
+          bookingStaff: booking.staff,
+        });
+      }
+      
+      if (matchesDate && matchesStaff) {
+        // Debug: log successful matches
+        console.log(`✓ Match: date="${dateStr}", staffId="${searchStaffId || 'any'}", booking=`, {
+          id: booking.id,
+          scheduledOn: scheduledOn,
+          staffId: bookingStaffId,
+        });
+      }
+      
       return matchesDate && matchesStaff;
     });
+    
+    // Debug: log summary
+    if (filtered.length > 0) {
+      console.log(`✅ Found ${filtered.length} booking(s) for date ${dateStr}, staffId=${staffId || 'all'}`);
+    } else if (allBookings.length > 0) {
+      console.log(`❌ No bookings found for date ${dateStr}, staffId=${staffId || 'all'}. Total bookings in state: ${allBookings.length}`);
+    }
+    
+    return filtered;
   };
 
   const getStatusIcon = (status: string) => {
@@ -1015,34 +1555,39 @@ export default function Calendar() {
                 {calendarView === "day" && (
                   <div className="">
                     {/* Staff Navigation Arrows */}
-                    {staffMembers.length > 3 && (
-                      <>
-                        <button
-                          onClick={() => setStaffScrollIndex(Math.max(0, staffScrollIndex - 1))}
-                          disabled={staffScrollIndex === 0}
-                          className={`absolute left-0 top-1/2 p-2 cursor-pointer z-20 rounded-[5px] ${
-                            staffScrollIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
-                          }`}
-                          style={{ top: 'calc(50% + 40px)' }}
-                        >
-                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => setStaffScrollIndex(Math.min(staffMembers.length - 3, staffScrollIndex + 1))}
-                          disabled={staffScrollIndex >= staffMembers.length - 3}
-                          className={`absolute right-0 top-1/2 p-2 cursor-pointer z-20 rounded-[5px]  ${
-                            staffScrollIndex >= staffMembers.length - 3 ? "opacity-50 cursor-not-allowed" : ""
-                          }`}
-                          style={{ top: 'calc(50% + 40px)' }}
-                        >
-                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </button>
-                      </>
-                    )}
+                    {(() => {
+                      const filteredStaff = getFilteredStaffForDate(currentDate);
+                      const filteredStaffLength = filteredStaff.length;
+                      const maxScrollIndex = Math.max(0, filteredStaffLength - 3);
+                      return filteredStaffLength > 3 && (
+                        <>
+                          <button
+                            onClick={() => setStaffScrollIndex(Math.max(0, staffScrollIndex - 1))}
+                            disabled={staffScrollIndex === 0}
+                            className={`absolute left-0 top-[35px] p-2 cursor-pointer z-20 rounded-[5px] ${
+                              staffScrollIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
+                            // style={{ top: 'calc(50% + 40px)' }}
+                          >
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => setStaffScrollIndex(Math.min(maxScrollIndex, staffScrollIndex + 1))}
+                            disabled={staffScrollIndex >= maxScrollIndex}
+                            className={`absolute right-0 top-[35px] p-2 cursor-pointer z-20 rounded-[5px]  ${
+                              staffScrollIndex >= maxScrollIndex ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
+                            // style={{ top: 'calc(50% + 40px)' }}
+                          >
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        </>
+                      );
+                    })()}
 
                     <div className="overflow-x-auto">
                       <div className="flex min-w-full">
@@ -1052,7 +1597,7 @@ export default function Calendar() {
                           {getTimeSlots().map((time, idx) => (
                             <div
                               key={idx}
-                              className="h-14 border-b border-gray-100 p-1.5 pt-1"
+                              className="h-24 border-b border-gray-100 p-1.5 pt-1"
                             >
                               <span className="text-[9px] font-semibold text-black/60">{time.display}</span>
                             </div>
@@ -1061,7 +1606,7 @@ export default function Calendar() {
 
                         {/* Staff Columns - Show only 3 at a time */}
                         <div className="flex-1 flex relative">
-                          {staffMembers.slice(staffScrollIndex, staffScrollIndex + 3).map((staff) => {
+                          {getFilteredStaffForDate(currentDate).slice(staffScrollIndex, staffScrollIndex + 3).map((staff) => {
                             const dayBookings = getBookingsForSlot(currentDate, staff.id);
                             return (
                               <div key={staff.id} className="flex-1 border-r border-gray-200 last:border-r-0">
@@ -1082,7 +1627,7 @@ export default function Calendar() {
                                     </div>
                                   ) : (
                                     <div
-                                      className="w-14 h-14 rounded-full flex items-center justify-center text-base font-semibold text-white mb-2"
+                                      className="w-[42px] h-[42px] rounded-full flex items-center justify-center text-base font-semibold text-white mb-2"
                                       style={{ 
                                         backgroundColor: staff.calendarColor || "#9CA3AF",
                                         border: `3px solid ${staff.calendarColor || "#9CA3AF"}`
@@ -1100,61 +1645,138 @@ export default function Calendar() {
                                     const slotStart = new Date(currentDate);
                                     slotStart.setHours(timeSlot.hour, timeSlot.minute, 0, 0);
                                     const slotEnd = new Date(slotStart);
-                                    slotEnd.setMinutes(slotEnd.getMinutes() + 90); // 1.5 hours = 90 minutes
+                                    slotEnd.setMinutes(slotEnd.getMinutes() + 60); // 1 hour = 60 minutes
 
                                     const slotBookings = dayBookings.filter((booking) => {
                                       const bookingStart = new Date(booking.scheduledOn);
                                       const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
-                                      return (
+                                      // Only include booking in the slot where it starts
+                                      // This prevents duplicate bookings when they span multiple slots
+                                      return bookingStart >= slotStart && bookingStart < slotEnd;
+                                    });
+
+                                    const slotStartMinutes = timeSlot.totalMinutes;
+                                    
+                                    // Get occupied time ranges in this slot
+                                    // Include all bookings that intersect with this slot (not just those that start here)
+                                    // This ensures 15-minute slots are correctly marked as occupied even if booking extends from previous slot
+                                    const occupiedRanges: Array<{ start: number; end: number }> = [];
+                                    dayBookings.forEach((booking) => {
+                                      const bookingStart = new Date(booking.scheduledOn);
+                                      const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
+                                      // Check if booking intersects with this slot
+                                      const intersects = (
                                         (bookingStart >= slotStart && bookingStart < slotEnd) ||
                                         (bookingEnd > slotStart && bookingEnd <= slotEnd) ||
                                         (bookingStart <= slotStart && bookingEnd >= slotEnd)
                                       );
+                                      if (intersects) {
+                                        const startMinutes = bookingStart.getHours() * 60 + bookingStart.getMinutes();
+                                        const endMinutes = bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
+                                        occupiedRanges.push({ start: startMinutes, end: endMinutes });
+                                      }
                                     });
+
+                                    // Check if a 15-minute slot is occupied
+                                    const isSlotOccupied = (slotMinutes: number): boolean => {
+                                      return occupiedRanges.some(
+                                        (range) => slotMinutes >= range.start && slotMinutes < range.end
+                                      );
+                                    };
 
                                     return (
                                       <div
                                         key={slotIdx}
-                                        className="h-14 border-b border-gray-100 relative"
+                                        className="h-24 border-b border-gray-100 relative"
                                       >
                                         {slotBookings.map((booking, idx) => {
                                           const bookingStart = new Date(booking.scheduledOn);
                                           const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
                                           const startMinutes = bookingStart.getHours() * 60 + bookingStart.getMinutes();
                                           const endMinutes = bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
-                                          const slotStartMinutes = timeSlot.totalMinutes;
-                                          const slotEndMinutes = slotStartMinutes + 90;
                                           
-                                          // Calculate position and height (based on 90-minute slots)
-                                          const topPercent = ((startMinutes - slotStartMinutes) / 90) * 100;
-                                          const heightPercent = ((endMinutes - startMinutes) / 90) * 100;
+                                          // Calculate position and height (based on 60-minute slots)
+                                          const topPercent = ((startMinutes - slotStartMinutes) / 60) * 100;
+                                          const heightPercent = ((endMinutes - startMinutes) / 60) * 100;
                                           
                                           return (
                                             <div
                                               key={booking.id}
                                               onClick={() => handleBookingClick(booking)}
-                                              className={`absolute left-1 right-1 rounded p-1.5 cursor-pointer border ${getStatusColor(booking.status)}`}
+                                              className={`absolute left-1 right-1 rounded p-[4px] cursor-pointer border ${getStatusColor(booking.status)}`}
                                               style={{
                                                 top: `${Math.max(0, topPercent)}%`,
-                                                height: `${Math.min(100, heightPercent)}%`,
+                                                height: `${heightPercent}%`, // Allow height to exceed 100% to span multiple slots
                                                 zIndex: 10 + idx,
                                               }}
                                             >
-                                              <div className="flex items-center justify-between">
-                                                <div className="flex-1 min-w-0">
-                                                  <div className="text-xs font-semibold text-gray-900 truncate">
-                                                    {booking.customer.name}
-                                                  </div>
-                                                  <div className="text-[10px] text-gray-600 truncate">
-                                                    {booking.service}
-                                                  </div>
-                                                  <div className="text-[10px] text-gray-500">
-                                                    {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
-                                                  </div>
-                                                </div>
-                                                <div className="ml-1 shrink-0">
+                                              <div className="h-full flex flex-col relative">
+                                                {/* Status Icon - Top Right */}
+                                                <div className="absolute top-0 right-0">
                                                   {getStatusIcon(booking.status)}
                                                 </div>
+                                                
+                                                {/* Content - Time and Service on left, Name on right */}
+                                                <div className="flex items-start gap-2 flex-1 pt-0.5">
+                                                  {/* Time and Service on the left */}
+                                                  <div className="shrink-0 flex flex-col">
+                                                    <div className="text-[10px] font-medium text-gray-700 whitespace-nowrap">
+                                                      {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-600 truncate leading-tight mt-0.5">
+                                                      {booking.service}
+                                                    </div>
+                                                  </div>
+                                                  
+                                                  {/* Name on the right */}
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="text-xs font-bold text-gray-900 truncate leading-tight">
+                                                      {booking.customer.name}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                        
+                                        {/* 15-minute clickable slots for empty areas */}
+                                        {get15MinuteSlots(timeSlot.hour).map((slot) => {
+                                          const slotMinutes = slot.totalMinutes;
+                                          const isOccupied = isSlotOccupied(slotMinutes);
+                                          
+                                          // Only show clickable slots if not occupied
+                                          if (isOccupied) return null;
+                                          
+                                          const slotTopPercent = ((slotMinutes - slotStartMinutes) / 60) * 100;
+                                          
+                                          return (
+                                            <div
+                                              key={`slot-${slot.hour}-${slot.minute}`}
+                                              onClick={() => {
+                                                if (canAddBooking) {
+                                                  const slotDate = new Date(currentDate);
+                                                  slotDate.setHours(slot.hour, slot.minute, 0, 0);
+                                                  setSelectedBookingDate(slotDate);
+                                                  setSelectedBookingTime(format15MinTime(slot.hour, slot.minute));
+                                                  setIsBookingSidebarOpen(true);
+                                                }
+                                              }}
+                                              className={`absolute left-0 right-0 border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer transition-all duration-200 ${
+                                                canAddBooking ? 'hover:bg-primary/10' : ''
+                                              }`}
+                                              style={{
+                                                top: `${slotTopPercent}%`,
+                                                height: `${(15 / 60) * 100}%`, // 15 minutes = 25% of 60 minutes
+                                                zIndex: 1,
+                                              }}
+                                              title={canAddBooking ? `Click to add booking at ${format15MinTime(slot.hour, slot.minute)}` : ''}
+                                            >
+                                              {/* Optional: show time label on hover */}
+                                              <div className="h-full flex items-center px-2 opacity-0 hover:opacity-100 transition-opacity">
+                                                <span className="text-[9px] font-semibold text-primary">
+                                                  {format15MinTime(slot.hour, slot.minute)}
+                                                </span>
                                               </div>
                                             </div>
                                           );
@@ -1203,7 +1825,7 @@ export default function Calendar() {
                       </div>
 
                       {/* Staff Rows */}
-                      {staffMembers.map((staff) => (
+                      {getFilteredStaffForDates(getWeekDays()).map((staff) => (
                         <div key={staff.id} className="flex border-b border-gray-200 min-h-[200px]">
                           <div className="w-48 flex-shrink-0 border-r border-gray-200 p-4">
                             <div className="flex items-center gap-3">
@@ -1226,6 +1848,17 @@ export default function Calendar() {
                           </div>
                           <div className="flex-1 flex relative">
                             {getWeekDays().map((day, dayIdx) => {
+                              // Only show bookings if staff works on this day
+                              if (!doesStaffWorkOnDay(staff, day)) {
+                                return (
+                                  <div
+                                    key={dayIdx}
+                                    className="flex-1 border-r border-gray-200 last:border-r-0 p-2 relative bg-gray-50"
+                                  >
+                                    <div className="text-xs text-gray-400 text-center mt-2">Not working</div>
+                                  </div>
+                                );
+                              }
                               const dayBookings = getBookingsForSlot(day, staff.id);
                               return (
                                 <div
@@ -1240,21 +1873,31 @@ export default function Calendar() {
                                         <div
                                           key={booking.id}
                                           onClick={() => handleBookingClick(booking)}
-                                          className={`p-2 rounded border cursor-pointer ${getStatusColor(booking.status)}`}
+                                          className={`p-2 rounded border cursor-pointer ${getStatusColor(booking.status)} relative`}
                                         >
-                                          <div className="flex items-center justify-between mb-1">
-                                            <div className="text-xs font-semibold text-gray-900 truncate flex-1">
-                                              {booking.customer.name}
-                                            </div>
-                                            <div className="ml-1 flex-shrink-0">
-                                              {getStatusIcon(booking.status)}
-                                            </div>
+                                          {/* Status Icon - Top Right */}
+                                          <div className="absolute top-1.5 right-1.5">
+                                            {getStatusIcon(booking.status)}
                                           </div>
-                                          <div className="text-[10px] text-gray-600 truncate mb-1">
-                                            {booking.service}
-                                          </div>
-                                          <div className="text-[10px] text-gray-500">
-                                            {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
+                                          
+                                          {/* Content - Time and Service on left, Name on right */}
+                                          <div className="flex items-start gap-2 pr-6">
+                                            {/* Time and Service on the left */}
+                                            <div className="shrink-0 flex flex-col">
+                                              <div className="text-[10px] font-medium text-gray-700 whitespace-nowrap">
+                                                {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
+                                              </div>
+                                              <div className="text-[10px] text-gray-600 truncate leading-tight mt-0.5">
+                                                {booking.service}
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Name on the right */}
+                                            <div className="flex-1 min-w-0">
+                                              <div className="text-xs font-bold text-gray-900 truncate leading-tight">
+                                                {booking.customer.name}
+                                              </div>
+                                            </div>
                                           </div>
                                         </div>
                                       );
@@ -1303,19 +1946,36 @@ export default function Calendar() {
                             <div className="space-y-1">
                               {visibleBookings.map((booking) => {
                                 const bookingStart = new Date(booking.scheduledOn);
+                                const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
                                 return (
                                   <div
                                     key={booking.id}
                                     onClick={() => handleBookingClick(booking)}
-                                    className={`p-1.5 rounded text-[10px] cursor-pointer border truncate ${getStatusColor(booking.status)}`}
+                                    className={`p-1.5 rounded text-[10px] cursor-pointer border ${getStatusColor(booking.status)} relative`}
                                   >
-                                    <div className="flex items-center gap-1">
-                                      <span className="font-semibold truncate">{booking.customer.name}</span>
-                                      <span className="flex-shrink-0">{getStatusIcon(booking.status)}</span>
+                                    {/* Status Icon - Top Right */}
+                                    <div className="absolute top-1 right-1">
+                                      {getStatusIcon(booking.status)}
                                     </div>
-                                    <div className="text-[9px] text-gray-600 truncate">{booking.service}</div>
-                                    <div className="text-[9px] text-gray-500">
-                                      {formatTime12Hour(bookingStart)}
+                                    
+                                    {/* Content - Time and Service on left, Name on right */}
+                                    <div className="flex items-start gap-1.5 pr-5">
+                                      {/* Time and Service on the left */}
+                                      <div className="shrink-0 flex flex-col">
+                                        <div className="text-[9px] font-medium text-gray-700 whitespace-nowrap">
+                                          {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
+                                        </div>
+                                        <div className="text-[9px] text-gray-600 truncate leading-tight">
+                                          {booking.service}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Name on the right */}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-[10px] font-bold text-gray-900 truncate leading-tight">
+                                          {booking.customer.name}
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
                                 );
@@ -1338,7 +1998,7 @@ export default function Calendar() {
         </div>
 
         {/* Pending Bookings Sidebar */}
-        <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full max-h-screen">
+        {/* <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full max-h-screen">
           <div className="p-6 pb-4 flex-shrink-0">
             <div className="flex items-center gap-2 mb-4">
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1355,7 +2015,7 @@ export default function Calendar() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 pb-6 relative min-h-0">
-            {/* Fade effect at bottom */}
+           
             <div className="sticky bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none z-10"></div>
 
           <div className="space-y-3">
@@ -1363,16 +2023,18 @@ export default function Calendar() {
               <p className="text-sm text-gray-500 text-center py-4">No pending bookings</p>
             ) : (
                 pendingBookings.map((booking) => {
-                  // Extract time from date string (format: "2025-11-22 12:26:00")
                   const bookingDate = booking.date ? new Date(booking.date) : null;
                   
-                  // Calculate end time based on services duration (assuming 30 min per service for now)
                   let startTime = "N/A";
                   let endTime = "N/A";
                   if (bookingDate) {
                     const startHours = bookingDate.getHours();
                     const startMinutes = bookingDate.getMinutes();
-                    const totalDuration = booking.services?.reduce((total, service) => total + 30, 0) || 30; // Default 30 min if no services
+                    
+                    const totalDuration = booking.services?.reduce((total: number, service: any) => {
+                      const serviceDuration = service.duration || service.duration_minutes || 30; // Default 30 min if not provided
+                      return total + serviceDuration;
+                    }, 0) || 30;
                     const endDate = new Date(bookingDate.getTime() + totalDuration * 60000);
                     const endHours = endDate.getHours();
                     const endMinutes = endDate.getMinutes();
@@ -1388,12 +2050,10 @@ export default function Calendar() {
                     endTime = formatTime(endHours, endMinutes);
                   }
                   
-                  // Get customer name
                   const customerName = booking.customer 
                     ? `${booking.customer.first_name || ""} ${booking.customer.last_name || ""}`.trim() || booking.customer.name
                     : `Customer #${booking.customer_id}`;
                   
-                  // Get staff name
                   const staffName = booking.staff?.name || `Staff #${booking.services?.[0]?.staff_id || booking.staff_id || "N/A"}`;
                   
                   return (
@@ -1443,7 +2103,7 @@ export default function Calendar() {
             )}
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
 
       {/* Edit Booking Sidebar */}
@@ -1465,10 +2125,18 @@ export default function Calendar() {
       {/* Add New Booking Sidebar */}
       {canAddBooking && isBookingSidebarOpen && (
         <AddBookingSidebar
-          onClose={() => setIsBookingSidebarOpen(false)}
+          initialDate={selectedBookingDate || undefined}
+          initialTime={selectedBookingTime || undefined}
+          onClose={() => {
+            setIsBookingSidebarOpen(false);
+            setSelectedBookingDate(null);
+            setSelectedBookingTime(null);
+          }}
           onSave={(customerName: string) => {
             fetchBookings();
             setIsBookingSidebarOpen(false);
+            setSelectedBookingDate(null);
+            setSelectedBookingTime(null);
             setSuccessMessage(`${customerName} was added to the bookings.`);
             setShowSuccessNotification(true);
             // Auto-hide notification after 3 seconds
@@ -1659,16 +2327,20 @@ function EditBookingSidebar({
 function AddBookingSidebar({
   onClose,
   onSave,
+  initialDate,
+  initialTime,
 }: {
   onClose: () => void;
   onSave: (customerName: string) => void;
+  initialDate?: Date;
+  initialTime?: string;
 }) {
   const { currentBranch } = useBranch();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(initialDate && initialTime ? 2 : 1); // Start at step 2 if date/time are pre-selected
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; email: string; avatar?: string } | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [selectedTime, setSelectedTime] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<Date>(initialDate || new Date());
+  const [selectedTime, setSelectedTime] = useState<string>(initialTime || "");
   const [selectedServices, setSelectedServices] = useState<Array<{ id: string; name: string; duration: number; price: number; teamMember?: string }>>([]);
   const [serviceSearch, setServiceSearch] = useState("");
   const [isAnimating, setIsAnimating] = useState(false);
@@ -1704,13 +2376,23 @@ function AddBookingSidebar({
     return () => clearTimeout(timer);
   }, []);
 
+  // Set initial date and time from props
+  useEffect(() => {
+    if (initialDate) {
+      setSelectedDate(initialDate);
+    }
+    if (initialTime) {
+      setSelectedTime(initialTime);
+    }
+  }, [initialDate, initialTime]);
+
   // Reset selected time when date changes (if the new date has different opening hours)
   // Also reset services and fetch key when date changes
   useEffect(() => {
-    if (currentStep === 2) {
-      setSelectedTime(""); // Reset time when date changes
+    if (currentStep === 2 && !initialDate) {
+      setSelectedTime(""); // Reset time when date changes, unless we have an initial date
     }
-  }, [selectedDate, currentStep]);
+  }, [selectedDate, currentStep, initialDate]);
 
 
   const handleClose = () => {
@@ -2917,9 +3599,17 @@ function AddBookingSidebar({
                                 {openTeamMemberDropdown === service.id && (() => {
                                   const serviceData = services.find(s => s.id === service.id);
                                   const availableStaff = serviceData?.staff || [];
+                                  const firstStaffId = availableStaff.length > 0 ? String(availableStaff[0].id) : null;
+                                  const selectedTeamMemberId = service.teamMember;
+                                  
+                                  // If a specific staff member is selected (not "any"), filter to show only that staff member
+                                  const filteredStaff = selectedTeamMemberId && selectedTeamMemberId !== firstStaffId
+                                    ? availableStaff.filter(s => String(s.id) === String(selectedTeamMemberId))
+                                    : availableStaff;
+                                  
                                   const allOptions = [
                                     { id: "any", name: "Any Team Member", avatar: null },
-                                    ...availableStaff.map(s => ({ id: String(s.id), name: s.name, avatar: s.avatar }))
+                                    ...filteredStaff.map(s => ({ id: String(s.id), name: s.name, avatar: s.avatar }))
                                   ];
                                   
                                   return (
@@ -3163,7 +3853,8 @@ function AddBookingSidebar({
                   // Format services array
                   const servicesData = selectedServices.map(service => ({
                     service_id: service.id,
-                    staff_id: service.teamMember || null
+                    staff_id: service.teamMember || null,
+                    duration: service.duration
                   }));
 
                   // Create booking payload
