@@ -24,47 +24,93 @@ export function BranchProvider({ children }: { children: ReactNode }) {
 
   const fetchPermissionsForBranch = async (branch: Branch) => {
     if (branch?.id) {
-      try {
-        // Clear permissions first to avoid showing stale data
-        setPermissions([]);
-        
-        // branch_id will be automatically added by axios interceptor, but we pass it explicitly for clarity
-        const response = await axiosClient.get("/get-permissions", {
-          params: { branch_id: branch.id }
-        });
-        
-        console.log("Permissions API response:", response.data);
-        
-        // Extract permissions from response - handle the structure: { status, message, data: { permissions: [...] } }
-        const newPermissions = response.data?.data?.permissions || response.data?.permissions || [];
-        
-        console.log("Extracted permissions:", newPermissions);
-        console.log("Has 'Add Booking':", newPermissions.includes("Add Booking"));
-        console.log("Branch ID:", branch.id, "Branch Label:", branch.label);
-        
-        // Update user permissions in storage
-        const user = getUser();
-        if (user) {
-          const updatedUser = {
-            ...user,
-            permissions: newPermissions,
-          };
-          setUser(updatedUser);
-        }
-        
-        // Update state so components can react immediately
-        setPermissions(newPermissions);
-        
-        console.log("Permissions state updated for branch:", branch.label, newPermissions);
-      } catch (error) {
-        console.error("Error fetching permissions for branch:", error);
-        // On error, clear permissions
-        setPermissions([]);
-        const user = getUser();
-        if (user) {
-          setUser({ ...user, permissions: [] });
-        }
+      // TEMPORARY: Bypass API and grant all permissions - remove this override to restore access control
+      const allPermissions = [
+        "Dashboard",
+        "Reports",
+        "View Staff",
+        "Add Staff",
+        "Edit Staff",
+        "Delete Staff",
+        "Customers",
+        "Services & Pricing",
+        "Marketing",
+        "Memberships",
+        "Balance and earnings",
+        "Settings",
+        "View Reports",
+        "View Dashboard",
+        "View Customers",
+        "View Services",
+        "View Marketing",
+        "View Memberships",
+        "View Balance",
+        "View Settings",
+        "Create Booking",
+        "Add Booking",
+        "Edit Booking",
+        "View All Bookings",
+        "View Own Bookings",
+      ];
+      
+      // Update user permissions in storage
+      const user = getUser();
+      if (user) {
+        const updatedUser = {
+          ...user,
+          permissions: allPermissions,
+        };
+        setUser(updatedUser);
       }
+      
+      // Update state so components can react immediately
+      setPermissions(allPermissions);
+      
+      console.log("TEMPORARY: All permissions granted for branch:", branch.label);
+      return;
+      
+      // Original code (commented out temporarily):
+      // try {
+      //   // Clear permissions first to avoid showing stale data
+      //   setPermissions([]);
+      //   
+      //   // branch_id will be automatically added by axios interceptor, but we pass it explicitly for clarity
+      //   const response = await axiosClient.get("/get-permissions", {
+      //     params: { branch_id: branch.id }
+      //   });
+      //   
+      //   console.log("Permissions API response:", response.data);
+      //   
+      //   // Extract permissions from response - handle the structure: { status, message, data: { permissions: [...] } }
+      //   const newPermissions = response.data?.data?.permissions || response.data?.permissions || [];
+      //   
+      //   console.log("Extracted permissions:", newPermissions);
+      //   console.log("Has 'Add Booking':", newPermissions.includes("Add Booking"));
+      //   console.log("Branch ID:", branch.id, "Branch Label:", branch.label);
+      //   
+      //   // Update user permissions in storage
+      //   const user = getUser();
+      //   if (user) {
+      //     const updatedUser = {
+      //       ...user,
+      //       permissions: newPermissions,
+      //     };
+      //     setUser(updatedUser);
+      //   }
+      //   
+      //   // Update state so components can react immediately
+      //   setPermissions(newPermissions);
+      //   
+      //   console.log("Permissions state updated for branch:", branch.label, newPermissions);
+      // } catch (error) {
+      //   console.error("Error fetching permissions for branch:", error);
+      //   // On error, clear permissions
+      //   setPermissions([]);
+      //   const user = getUser();
+      //   if (user) {
+      //     setUser({ ...user, permissions: [] });
+      //   }
+      // }
     }
   };
 
