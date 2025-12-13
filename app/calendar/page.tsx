@@ -30,7 +30,7 @@ interface Booking {
   };
   duration: number;
   payment: string;
-  status: "Pending" | "Confirmed" | "Started" | "Completed" | "Cancelled";
+  status: "Pending" | "Confirmed" | "Started" | "Completed" | "Cancelled" | "No Show";
 }
 
 interface PendingBooking {
@@ -117,6 +117,9 @@ export default function Calendar() {
   const [successMessage, setSuccessMessage] = useState("");
   const [selectedBookingDate, setSelectedBookingDate] = useState<Date | null>(null);
   const [selectedBookingTime, setSelectedBookingTime] = useState<string | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [branchOpeningHours, setBranchOpeningHours] = useState<any>(null);
+  const [isLoadingOpeningHours, setIsLoadingOpeningHours] = useState(false);
 
   // Use permissions from context (they update automatically when branch changes)
   // Ensure contextPermissions is always an array to prevent errors
@@ -551,6 +554,38 @@ export default function Calendar() {
     }
   }, [view, currentBranch, fetchAllBookingsForCalendar]);
 
+  // Fetch branch opening hours
+  const fetchBranchOpeningHours = useCallback(async () => {
+    if (!currentBranch?.id) {
+      return;
+    }
+
+    setIsLoadingOpeningHours(true);
+    try {
+      const response = await axiosClient.get("/branch/get");
+      const branchData = response.data?.data?.branch || response.data?.branch || response.data?.data || response.data;
+      const openingHours = branchData?.opening_hours;
+
+      if (openingHours) {
+        setBranchOpeningHours(openingHours);
+      } else {
+        setBranchOpeningHours(null);
+      }
+    } catch (error: any) {
+      console.warn("Could not fetch branch opening hours:", error?.response?.status || error?.message || "Unknown error");
+      setBranchOpeningHours(null);
+    } finally {
+      setIsLoadingOpeningHours(false);
+    }
+  }, [currentBranch?.id]);
+
+  // Fetch opening hours when branch changes
+  useEffect(() => {
+    if (currentBranch) {
+      fetchBranchOpeningHours();
+    }
+  }, [currentBranch?.id, branchChangeKey, fetchBranchOpeningHours]);
+
   // Persist view state to localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -878,6 +913,137 @@ export default function Calendar() {
     });
   };
 
+  // Convert 24-hour time to 12-hour format
+  const convert24To12Hour = (time24h: string): string => {
+    if (!time24h) return "10:00 am";
+    
+    const time = time24h.trim().replace(/\s+/g, '');
+    // Check if already in 12-hour format
+    if (/^\d{1,2}:\d{2}(am|pm)$/i.test(time)) {
+      const match = time.match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
+      if (match) {
+        return `${match[1]}:${match[2]} ${match[3].toLowerCase()}`;
+      }
+      return time;
+    }
+    
+    // Parse 24-hour format
+    const match = time.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = match[2];
+      
+      if (isNaN(hours) || hours < 0 || hours > 23) {
+        return "10:00 am";
+      }
+      
+      const period = hours >= 12 ? "pm" : "am";
+      const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+      
+      return `${displayHours.toString().padStart(2, "0")}:${minutes} ${period}`;
+    }
+    
+    return "10:00 am";
+  };
+
+  // Get opening hours for a specific day
+  const getOpeningHoursForDay = (date: Date): { startTime: string; endTime: string } | null => {
+    if (!branchOpeningHours) return null;
+
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    // Convert to Monday-first format (0 = Monday, 6 = Sunday)
+    const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+    const dayNameToIndex: { [key: string]: number } = {
+      monday: 0,
+      tuesday: 1,
+      wednesday: 2,
+      thursday: 3,
+      friday: 4,
+      saturday: 5,
+      sunday: 6,
+      mon: 0,
+      tue: 1,
+      wed: 2,
+      thu: 3,
+      fri: 4,
+      sat: 5,
+      sun: 6,
+    };
+
+    let entries: any[] = [];
+    if (Array.isArray(branchOpeningHours)) {
+      entries = branchOpeningHours;
+    } else if (typeof branchOpeningHours === 'object') {
+      entries = Object.values(branchOpeningHours);
+    } else {
+      return null;
+    }
+
+    // Find matching day entry
+    for (const entry of entries) {
+      if (!entry || !entry.day || !entry.from || !entry.to) continue;
+      
+      const dayStr = entry.day.trim().toLowerCase();
+      
+      // Check if it's a range
+      if (dayStr.includes("-") || dayStr.includes("to")) {
+        const rangeMatch = dayStr.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s*[-to]+\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)/i);
+        if (rangeMatch) {
+          const startDay = rangeMatch[1].toLowerCase();
+          const endDay = rangeMatch[2].toLowerCase();
+          const startIndex = dayNameToIndex[startDay];
+          const endIndex = dayNameToIndex[endDay];
+          
+          if (startIndex !== undefined && endIndex !== undefined && dayIndex >= startIndex && dayIndex <= endIndex) {
+            return {
+              startTime: convert24To12Hour(entry.from),
+              endTime: convert24To12Hour(entry.to),
+            };
+          }
+        }
+      } else {
+        // Single day
+        const entryDayIndex = dayNameToIndex[dayStr];
+        if (entryDayIndex === dayIndex) {
+          return {
+            startTime: convert24To12Hour(entry.from),
+            endTime: convert24To12Hour(entry.to),
+          };
+        }
+      }
+    }
+
+    return null;
+  };
+
+  // Parse time string to minutes from midnight
+  const parseTimeToMinutes = (timeStr: string): number => {
+    const parts = timeStr.trim().split(" ");
+    const period = parts[parts.length - 1].toLowerCase(); // Get am/pm
+    const timePart = parts.slice(0, -1).join(" "); // Get time part (handles "01:00" or "1:00")
+    const [hours, minutes] = timePart.split(":").map(Number);
+    let totalMinutes = hours * 60 + minutes;
+    if (period === "pm" && hours !== 12) {
+      totalMinutes += 12 * 60;
+    } else if (period === "am" && hours === 12) {
+      totalMinutes -= 12 * 60;
+    }
+    return totalMinutes;
+  };
+
+  // Check if a specific time is within opening hours
+  const isTimeWithinOpeningHours = (date: Date, hour: number, minute: number): boolean => {
+    const hours = getOpeningHoursForDay(date);
+    if (!hours) return false;
+
+    const timeMinutes = hour * 60 + minute;
+    const startMinutes = parseTimeToMinutes(hours.startTime);
+    const endMinutes = parseTimeToMinutes(hours.endTime);
+
+    return timeMinutes >= startMinutes && timeMinutes < endMinutes;
+  };
+
   const formatTime12Hour = (date: Date) => {
     return date.toLocaleTimeString("en-US", {
       hour: "numeric",
@@ -1070,29 +1236,43 @@ export default function Calendar() {
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
       case "completed":
+        return (
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18.3337 10.0001C18.3337 5.39771 14.6027 1.66675 10.0003 1.66675C5.39795 1.66675 1.66699 5.39771 1.66699 10.0001C1.66699 14.6024 5.39795 18.3334 10.0003 18.3334C14.6027 18.3334 18.3337 14.6024 18.3337 10.0001Z" stroke="#8A38F5" strokeWidth="1.5"/>
+            <path d="M6.66699 10.4167L8.75033 12.5L13.3337 7.5" stroke="#8A38F5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        );
       case "confirmed":
         return (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M13.3333 4L6 11.3333L2.66667 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M13.3337 1.66675V5.00008M6.66699 1.66675V5.00008" stroke="#009207" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M17.5 10.8333V9.99992C17.5 6.85722 17.5 5.28588 16.5237 4.30956C15.5474 3.33325 13.976 3.33325 10.8333 3.33325H9.16667C6.02397 3.33325 4.45262 3.33325 3.47631 4.30956C2.5 5.28588 2.5 6.85722 2.5 9.99992V11.6666C2.5 14.8093 2.5 16.3807 3.47631 17.3569C4.45262 18.3333 6.02397 18.3333 9.16667 18.3333" stroke="#009207" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2.5 8.33325H17.5" stroke="#009207" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M10.833 16.2499C10.833 16.2499 11.9568 16.6722 12.4997 18.3333C12.4997 18.3333 15.1468 14.1666 17.4997 13.3333" stroke="#009207" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         );
       case "started":
         return (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 2.66667L10.6667 6H13.3333L10.6667 9.33333L8 13.3333L5.33333 9.33333L2.66667 6H5.33333L8 2.66667Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M15.7425 10.705C15.4479 11.8242 14.0559 12.615 11.2717 14.1968C8.58032 15.7258 7.23466 16.4903 6.15018 16.183C5.70183 16.0559 5.29332 15.8147 4.96386 15.4822C4.16699 14.6782 4.16699 13.1188 4.16699 10C4.16699 6.88117 4.16699 5.32175 4.96386 4.51777C5.29332 4.18538 5.70183 3.94407 6.15018 3.81702C7.23466 3.50971 8.58032 4.27423 11.2717 5.80328C14.0559 7.38498 15.4479 8.17583 15.7425 9.295C15.8641 9.757 15.8641 10.243 15.7425 10.705Z" stroke="#48CAE4" strokeWidth="1.0625" strokeLinejoin="round"/>
           </svg>
         );
       case "pending":
         return (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2"/>
-            <path d="M8 5V8L10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 17 17" fill="none">
+            <path d="M11.3337 1.41663V4.24996M5.66699 1.41663V4.24996" stroke="black" strokeOpacity="0.25" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M14.875 8.50004C14.875 5.82875 14.875 4.49311 14.0451 3.66324C13.2153 2.83337 11.8796 2.83337 9.20833 2.83337H7.79167C5.12037 2.83337 3.78473 2.83337 2.95486 3.66324C2.125 4.49311 2.125 5.82875 2.125 8.50004V9.91671C2.125 12.588 2.125 13.9237 2.95486 14.7535C3.78473 15.5834 5.12037 15.5834 7.79167 15.5834" stroke="black" strokeOpacity="0.25" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2.125 7.08337H14.875" stroke="black" strokeOpacity="0.25" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12.9389 13.2466L12.0413 12.75V11.5223M14.8747 12.75C14.8747 14.3147 13.6061 15.5833 12.0413 15.5833C10.4766 15.5833 9.20801 14.3147 9.20801 12.75C9.20801 11.1852 10.4766 9.91663 12.0413 9.91663C13.6061 9.91663 14.8747 11.1852 14.8747 12.75Z" stroke="black" strokeOpacity="0.25" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         );
       default:
         return (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="2"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 17 17" fill="none">
+            <path d="M11.3337 1.41663V4.24996M5.66699 1.41663V4.24996" stroke="black" strokeOpacity="0.25" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M14.875 8.50004C14.875 5.82875 14.875 4.49311 14.0451 3.66324C13.2153 2.83337 11.8796 2.83337 9.20833 2.83337H7.79167C5.12037 2.83337 3.78473 2.83337 2.95486 3.66324C2.125 4.49311 2.125 5.82875 2.125 8.50004V9.91671C2.125 12.588 2.125 13.9237 2.95486 14.7535C3.78473 15.5834 5.12037 15.5834 7.79167 15.5834" stroke="black" strokeOpacity="0.25" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2.125 7.08337H14.875" stroke="black" strokeOpacity="0.25" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12.9389 13.2466L12.0413 12.75V11.5223M14.8747 12.75C14.8747 14.3147 13.6061 15.5833 12.0413 15.5833C10.4766 15.5833 9.20801 14.3147 9.20801 12.75C9.20801 11.1852 10.4766 9.91663 12.0413 9.91663C13.6061 9.91663 14.8747 11.1852 14.8747 12.75Z" stroke="black" strokeOpacity="0.25" strokeWidth="1.0625" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         );
     }
@@ -1101,16 +1281,17 @@ export default function Calendar() {
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "completed":
+        return "#EDE1FE";
       case "confirmed":
-        return "bg-purple-100 text-purple-700 border-purple-200";
+        return "#D9EFDA";
       case "started":
-        return "bg-yellow-100 text-yellow-700 border-yellow-200";
+        return "#E4F7FB";
       case "pending":
-        return "bg-blue-100 text-blue-700 border-blue-200";
+        return "#0000000D";
       case "cancelled":
         return "bg-red-100 text-red-700 border-red-200";
       default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
+        return "#0000000D";
     }
   };
 
@@ -1552,14 +1733,26 @@ export default function Calendar() {
 
               {/* Calendar Content */}
               <div className="bg-white relative">
-                {calendarView === "day" && (
-                  <div className="">
-                    {/* Staff Navigation Arrows */}
-                    {(() => {
-                      const filteredStaff = getFilteredStaffForDate(currentDate);
-                      const filteredStaffLength = filteredStaff.length;
-                      const maxScrollIndex = Math.max(0, filteredStaffLength - 3);
-                      return filteredStaffLength > 3 && (
+                {calendarView === "day" && (() => {
+                  const hasOpeningHours = getOpeningHoursForDay(currentDate) !== null;
+                  
+                  if (!hasOpeningHours && !isLoadingOpeningHours) {
+                    return (
+                      <div className="p-8 text-center">
+                        <div className="text-gray-500 text-sm mb-2">Branch is closed on this day</div>
+                        <div className="text-gray-400 text-xs">No opening hours defined for {currentDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
+                      </div>
+                    );
+                  }
+                  
+                  const filteredStaff = getFilteredStaffForDate(currentDate);
+                  const filteredStaffLength = filteredStaff.length;
+                  const maxScrollIndex = Math.max(0, filteredStaffLength - 3);
+                  
+                  return (
+                    <div className="">
+                      {/* Staff Navigation Arrows */}
+                      {filteredStaffLength > 3 && (
                         <>
                           <button
                             onClick={() => setStaffScrollIndex(Math.max(0, staffScrollIndex - 1))}
@@ -1567,7 +1760,6 @@ export default function Calendar() {
                             className={`absolute left-0 top-[35px] p-2 cursor-pointer z-20 rounded-[5px] ${
                               staffScrollIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
                             }`}
-                            // style={{ top: 'calc(50% + 40px)' }}
                           >
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1579,220 +1771,253 @@ export default function Calendar() {
                             className={`absolute right-0 top-[35px] p-2 cursor-pointer z-20 rounded-[5px]  ${
                               staffScrollIndex >= maxScrollIndex ? "opacity-50 cursor-not-allowed" : ""
                             }`}
-                            // style={{ top: 'calc(50% + 40px)' }}
                           >
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                           </button>
                         </>
-                      );
-                    })()}
+                      )}
 
-                    <div className="overflow-x-auto">
-                      <div className="flex min-w-full">
-                        {/* Time Column */}
-                        <div className="w-10 shrink-0 border-r border-gray-200">
-                          <div className="h-[105px] border-b border-gray-200 bg-transparent"></div>
-                          {getTimeSlots().map((time, idx) => (
-                            <div
-                              key={idx}
-                              className="h-24 border-b border-gray-100 p-1.5 pt-1"
-                            >
-                              <span className="text-[9px] font-semibold text-black/60">{time.display}</span>
-                            </div>
-                          ))}
-                        </div>
+                      <div className="overflow-x-auto">
+                        <div className="flex min-w-full">
+                          {/* Time Column */}
+                          <div className="w-10 shrink-0 border-r border-gray-200">
+                            <div className="h-[105px] border-b border-gray-200 bg-transparent"></div>
+                            {getTimeSlots().map((time, idx) => (
+                              <div
+                                key={idx}
+                                className="h-24 border-b border-gray-100 p-1.5 pt-1"
+                              >
+                                <span className="text-[9px] font-semibold text-black/60">{time.display}</span>
+                              </div>
+                            ))}
+                          </div>
 
-                        {/* Staff Columns - Show only 3 at a time */}
-                        <div className="flex-1 flex relative">
-                          {getFilteredStaffForDate(currentDate).slice(staffScrollIndex, staffScrollIndex + 3).map((staff) => {
-                            const dayBookings = getBookingsForSlot(currentDate, staff.id);
-                            return (
-                              <div key={staff.id} className="flex-1 border-r border-gray-200 last:border-r-0">
-                                {/* Staff Header */}
-                                <div className="border-b border-gray-200 p-3 flex flex-col items-center justify-center h-[105px]">
-                                  {staff.avatar ? (
-                                    <div
-                                      className="w-12 h-12 rounded-full mb-2 flex items-center justify-center overflow-hidden"
-                                      style={{ 
-                                        border: `3px solid ${staff.calendarColor || "#9CA3AF"}`,
-                                      }}
-                                    >
-                                      <img
-                                        src={staff.avatar}
-                                        alt={staff.name}
-                                        className="w-full h-full rounded-full object-cover"
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div
-                                      className="w-[42px] h-[42px] rounded-full flex items-center justify-center text-base font-semibold text-white mb-2"
-                                      style={{ 
-                                        backgroundColor: staff.calendarColor || "#9CA3AF",
-                                        border: `3px solid ${staff.calendarColor || "#9CA3AF"}`
-                                      }}
-                                    >
-                                      {staff.name.charAt(0)}
-                                    </div>
-                                  )}
-                                  <span className="text-xs font-medium text-black/80">{staff.name}</span>
-                                </div>
-
-                                {/* Time Slots */}
-                                <div className="relative">
-                                  {getTimeSlots().map((timeSlot, slotIdx) => {
-                                    const slotStart = new Date(currentDate);
-                                    slotStart.setHours(timeSlot.hour, timeSlot.minute, 0, 0);
-                                    const slotEnd = new Date(slotStart);
-                                    slotEnd.setMinutes(slotEnd.getMinutes() + 60); // 1 hour = 60 minutes
-
-                                    const slotBookings = dayBookings.filter((booking) => {
-                                      const bookingStart = new Date(booking.scheduledOn);
-                                      const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
-                                      // Only include booking in the slot where it starts
-                                      // This prevents duplicate bookings when they span multiple slots
-                                      return bookingStart >= slotStart && bookingStart < slotEnd;
-                                    });
-
-                                    const slotStartMinutes = timeSlot.totalMinutes;
-                                    
-                                    // Get occupied time ranges in this slot
-                                    // Include all bookings that intersect with this slot (not just those that start here)
-                                    // This ensures 15-minute slots are correctly marked as occupied even if booking extends from previous slot
-                                    const occupiedRanges: Array<{ start: number; end: number }> = [];
-                                    dayBookings.forEach((booking) => {
-                                      const bookingStart = new Date(booking.scheduledOn);
-                                      const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
-                                      // Check if booking intersects with this slot
-                                      const intersects = (
-                                        (bookingStart >= slotStart && bookingStart < slotEnd) ||
-                                        (bookingEnd > slotStart && bookingEnd <= slotEnd) ||
-                                        (bookingStart <= slotStart && bookingEnd >= slotEnd)
-                                      );
-                                      if (intersects) {
-                                        const startMinutes = bookingStart.getHours() * 60 + bookingStart.getMinutes();
-                                        const endMinutes = bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
-                                        occupiedRanges.push({ start: startMinutes, end: endMinutes });
-                                      }
-                                    });
-
-                                    // Check if a 15-minute slot is occupied
-                                    const isSlotOccupied = (slotMinutes: number): boolean => {
-                                      return occupiedRanges.some(
-                                        (range) => slotMinutes >= range.start && slotMinutes < range.end
-                                      );
-                                    };
-
-                                    return (
+                          {/* Staff Columns - Show only 3 at a time */}
+                          <div className="flex-1 flex relative">
+                            {filteredStaff.slice(staffScrollIndex, staffScrollIndex + 3).map((staff) => {
+                              const dayBookings = getBookingsForSlot(currentDate, staff.id);
+                              return (
+                                <div key={staff.id} className="flex-1 border-r border-gray-200 last:border-r-0">
+                                  {/* Staff Header */}
+                                  <div 
+                                    onClick={() => {
+                                      setSelectedStaffId(staff.id);
+                                    }}
+                                    className={`border-b border-gray-200 p-3 flex flex-col items-center justify-center h-[105px] cursor-pointer transition-colors ${
+                                      selectedStaffId === staff.id ? 'bg-primary/10' : 'hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    {staff.avatar ? (
                                       <div
-                                        key={slotIdx}
-                                        className="h-24 border-b border-gray-100 relative"
+                                        className="w-12 h-12 rounded-full mb-2 flex items-center justify-center overflow-hidden"
+                                        style={{ 
+                                          border: `3px solid ${staff.calendarColor || "#9CA3AF"}`,
+                                        }}
                                       >
-                                        {slotBookings.map((booking, idx) => {
-                                          const bookingStart = new Date(booking.scheduledOn);
-                                          const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
+                                        <img
+                                          src={staff.avatar}
+                                          alt={staff.name}
+                                          className="w-full h-full rounded-full object-cover"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        className="w-[42px] h-[42px] rounded-full flex items-center justify-center text-base font-semibold text-white mb-2"
+                                        style={{ 
+                                          backgroundColor: staff.calendarColor || "#9CA3AF",
+                                          border: `3px solid ${staff.calendarColor || "#9CA3AF"}`
+                                        }}
+                                      >
+                                        {staff.name.charAt(0)}
+                                      </div>
+                                    )}
+                                    <span className="text-xs font-medium text-black/80">{staff.name}</span>
+                                  </div>
+
+                                  {/* Time Slots */}
+                                  <div className="relative">
+                                    {getTimeSlots().map((timeSlot, slotIdx) => {
+                                      const slotStart = new Date(currentDate);
+                                      slotStart.setHours(timeSlot.hour, timeSlot.minute, 0, 0);
+                                      const slotEnd = new Date(slotStart);
+                                      slotEnd.setMinutes(slotEnd.getMinutes() + 60); // 1 hour = 60 minutes
+
+                                      const slotBookings = dayBookings.filter((booking) => {
+                                        const bookingStart = new Date(booking.scheduledOn);
+                                        const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
+                                        // Only include booking in the slot where it starts
+                                        // This prevents duplicate bookings when they span multiple slots
+                                        return bookingStart >= slotStart && bookingStart < slotEnd;
+                                      });
+
+                                      const slotStartMinutes = timeSlot.totalMinutes;
+                                      
+                                      // Get occupied time ranges in this slot
+                                      // Include all bookings that intersect with this slot (not just those that start here)
+                                      // This ensures 15-minute slots are correctly marked as occupied even if booking extends from previous slot
+                                      const occupiedRanges: Array<{ start: number; end: number }> = [];
+                                      dayBookings.forEach((booking) => {
+                                        const bookingStart = new Date(booking.scheduledOn);
+                                        const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
+                                        // Check if booking intersects with this slot
+                                        const intersects = (
+                                          (bookingStart >= slotStart && bookingStart < slotEnd) ||
+                                          (bookingEnd > slotStart && bookingEnd <= slotEnd) ||
+                                          (bookingStart <= slotStart && bookingEnd >= slotEnd)
+                                        );
+                                        if (intersects) {
                                           const startMinutes = bookingStart.getHours() * 60 + bookingStart.getMinutes();
                                           const endMinutes = bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
-                                          
-                                          // Calculate position and height (based on 60-minute slots)
-                                          const topPercent = ((startMinutes - slotStartMinutes) / 60) * 100;
-                                          const heightPercent = ((endMinutes - startMinutes) / 60) * 100;
-                                          
-                                          return (
-                                            <div
-                                              key={booking.id}
-                                              onClick={() => handleBookingClick(booking)}
-                                              className={`absolute left-1 right-1 rounded p-[4px] cursor-pointer border ${getStatusColor(booking.status)}`}
-                                              style={{
-                                                top: `${Math.max(0, topPercent)}%`,
-                                                height: `${heightPercent}%`, // Allow height to exceed 100% to span multiple slots
-                                                zIndex: 10 + idx,
-                                              }}
-                                            >
-                                              <div className="h-full flex flex-col relative">
-                                                {/* Status Icon - Top Right */}
-                                                <div className="absolute top-0 right-0">
-                                                  {getStatusIcon(booking.status)}
-                                                </div>
-                                                
-                                                {/* Content - Time and Service on left, Name on right */}
-                                                <div className="flex items-start gap-2 flex-1 pt-0.5">
-                                                  {/* Time and Service on the left */}
-                                                  <div className="shrink-0 flex flex-col">
-                                                    <div className="text-[10px] font-medium text-gray-700 whitespace-nowrap">
-                                                      {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
-                                                    </div>
-                                                    <div className="text-[10px] text-gray-600 truncate leading-tight mt-0.5">
-                                                      {booking.service}
-                                                    </div>
+                                          occupiedRanges.push({ start: startMinutes, end: endMinutes });
+                                        }
+                                      });
+
+                                      // Check if a 15-minute slot is occupied
+                                      const isSlotOccupied = (slotMinutes: number): boolean => {
+                                        return occupiedRanges.some(
+                                          (range) => slotMinutes >= range.start && slotMinutes < range.end
+                                        );
+                                      };
+
+                                      return (
+                                        <div
+                                          key={slotIdx}
+                                          className="h-24 border-b border-gray-100 relative"
+                                        >
+                                          {slotBookings.map((booking, idx) => {
+                                            const bookingStart = new Date(booking.scheduledOn);
+                                            const bookingEnd = new Date(bookingStart.getTime() + booking.duration * 60000);
+                                            const startMinutes = bookingStart.getHours() * 60 + bookingStart.getMinutes();
+                                            const endMinutes = bookingEnd.getHours() * 60 + bookingEnd.getMinutes();
+                                            
+                                            // Calculate position and height (based on 60-minute slots)
+                                            const topPercent = ((startMinutes - slotStartMinutes) / 60) * 100;
+                                            const heightPercent = ((endMinutes - startMinutes) / 60) * 100;
+                                            
+                                            return (
+                                              <div
+                                                key={booking.id}
+                                                onClick={() => handleBookingClick(booking)}
+                                                className="absolute left-1 right-1 p-[4px] cursor-pointer border"
+                                                style={{
+                                                  top: `${Math.max(0, topPercent)}%`,
+                                                  height: `${heightPercent}%`, // Allow height to exceed 100% to span multiple slots
+                                                  zIndex: 10 + idx,
+                                                  backgroundColor: getStatusColor(booking.status),
+                                                  borderRadius: '3px',
+                                                  borderColor: 'transparent',
+                                                }}
+                                              >
+                                                <div className="h-full flex flex-col relative">
+                                                  {/* Status Icon - Top Right */}
+                                                  <div className="absolute top-0 right-0">
+                                                    {getStatusIcon(booking.status)}
                                                   </div>
                                                   
-                                                  {/* Name on the right */}
-                                                  <div className="flex-1 min-w-0">
-                                                    <div className="text-xs font-bold text-gray-900 truncate leading-tight">
-                                                      {booking.customer.name}
+                                                  {/* Content - Time and Service on left, Name on right */}
+                                                  <div className="flex items-start gap-2 flex-1 pt-0.5">
+                                                    {/* Time on the left */}
+                                                    <div className="shrink-0">
+                                                      <div className="text-[10px] font-medium text-gray-700 whitespace-nowrap">
+                                                        {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
+                                                      </div>
+                                                      {booking.duration >= 30 && (
+                                                        <div className="text-[10px] text-gray-600 truncate leading-tight mt-0.5">
+                                                          {booking.service}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                    
+                                                    {/* Name and Service (if < 30 mins) on the right */}
+                                                    <div className="flex-1 min-w-0">
+                                                      <div className="text-xs font-bold text-gray-900 truncate leading-tight">
+                                                        {booking.customer.name}
+                                                        {booking.duration < 30 && (
+                                                          <span className="text-[10px] font-normal text-gray-600 ml-1.5">
+                                                            {booking.service}
+                                                          </span>
+                                                        )}
+                                                      </div>
                                                     </div>
                                                   </div>
                                                 </div>
                                               </div>
-                                            </div>
-                                          );
-                                        })}
-                                        
-                                        {/* 15-minute clickable slots for empty areas */}
-                                        {get15MinuteSlots(timeSlot.hour).map((slot) => {
-                                          const slotMinutes = slot.totalMinutes;
-                                          const isOccupied = isSlotOccupied(slotMinutes);
+                                            );
+                                          })}
                                           
-                                          // Only show clickable slots if not occupied
-                                          if (isOccupied) return null;
-                                          
-                                          const slotTopPercent = ((slotMinutes - slotStartMinutes) / 60) * 100;
-                                          
-                                          return (
-                                            <div
-                                              key={`slot-${slot.hour}-${slot.minute}`}
-                                              onClick={() => {
-                                                if (canAddBooking) {
-                                                  const slotDate = new Date(currentDate);
-                                                  slotDate.setHours(slot.hour, slot.minute, 0, 0);
-                                                  setSelectedBookingDate(slotDate);
-                                                  setSelectedBookingTime(format15MinTime(slot.hour, slot.minute));
-                                                  setIsBookingSidebarOpen(true);
-                                                }
-                                              }}
-                                              className={`absolute left-0 right-0 border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer transition-all duration-200 ${
-                                                canAddBooking ? 'hover:bg-primary/10' : ''
-                                              }`}
-                                              style={{
-                                                top: `${slotTopPercent}%`,
-                                                height: `${(15 / 60) * 100}%`, // 15 minutes = 25% of 60 minutes
-                                                zIndex: 1,
-                                              }}
-                                              title={canAddBooking ? `Click to add booking at ${format15MinTime(slot.hour, slot.minute)}` : ''}
-                                            >
-                                              {/* Optional: show time label on hover */}
-                                              <div className="h-full flex items-center px-2 opacity-0 hover:opacity-100 transition-opacity">
-                                                <span className="text-[9px] font-semibold text-primary">
-                                                  {format15MinTime(slot.hour, slot.minute)}
-                                                </span>
+                                          {/* 15-minute clickable slots for empty areas */}
+                                          {get15MinuteSlots(timeSlot.hour).map((slot) => {
+                                            const slotMinutes = slot.totalMinutes;
+                                            const isOccupied = isSlotOccupied(slotMinutes);
+                                            
+                                            // Check if time is within opening hours
+                                            const isWithinHours = isTimeWithinOpeningHours(currentDate, slot.hour, slot.minute);
+                                            
+                                            // Only show clickable slots if not occupied and within opening hours
+                                            if (isOccupied || !isWithinHours) return null;
+                                            
+                                            const slotTopPercent = ((slotMinutes - slotStartMinutes) / 60) * 100;
+                                            
+                                            return (
+                                              <div
+                                                key={`slot-${slot.hour}-${slot.minute}`}
+                                                onClick={() => {
+                                                  if (canAddBooking) {
+                                                    // Set date at midnight (time is stored separately)
+                                                    const slotDate = new Date(currentDate);
+                                                    slotDate.setHours(0, 0, 0, 0);
+                                                    setSelectedBookingDate(slotDate);
+                                                    
+                                                    // Format time to match the format used in timeSlots
+                                                    // formatMinutesToTime returns format like "2:30 pm" (lowercase, no leading zero for hours)
+                                                    // We need to convert hour/minute to the same format
+                                                    const totalMinutes = slot.hour * 60 + slot.minute;
+                                                    const hours24 = Math.floor(totalMinutes / 60);
+                                                    const mins = totalMinutes % 60;
+                                                    const period = hours24 >= 12 ? "pm" : "am";
+                                                    let hours12 = hours24 > 12 ? hours24 - 12 : hours24 === 0 ? 12 : hours24;
+                                                    const formattedMins = mins.toString().padStart(2, "0");
+                                                    const formattedTime = `${hours12}:${formattedMins} ${period}`;
+                                                    
+                                                    setSelectedBookingTime(formattedTime);
+                                                    setSelectedStaffId(staff.id);
+                                                    setIsBookingSidebarOpen(true);
+                                                  }
+                                                }}
+                                                className={`absolute left-0 right-0 border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer transition-all duration-200 ${
+                                                  canAddBooking ? 'hover:bg-primary/10' : ''
+                                                }`}
+                                                style={{
+                                                  top: `${slotTopPercent}%`,
+                                                  height: `${(15 / 60) * 100}%`, // 15 minutes = 25% of 60 minutes
+                                                  zIndex: 1,
+                                                }}
+                                                title={canAddBooking ? `Click to add booking at ${format15MinTime(slot.hour, slot.minute)}` : ''}
+                                              >
+                                                {/* Optional: show time label on hover */}
+                                                <div className="h-full flex items-center px-2 opacity-0 hover:opacity-100 transition-opacity">
+                                                  <span className="text-[9px] font-semibold text-primary">
+                                                    {format15MinTime(slot.hour, slot.minute)}
+                                                  </span>
+                                                </div>
                                               </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    );
-                                  })}
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {calendarView === "week" && (
                   <div className="overflow-x-auto">
@@ -1860,10 +2085,29 @@ export default function Calendar() {
                                 );
                               }
                               const dayBookings = getBookingsForSlot(day, staff.id);
+                              const hasOpeningHours = getOpeningHoursForDay(day) !== null;
+                              const isClickable = canAddBooking && hasOpeningHours;
+
                               return (
                                 <div
                                   key={dayIdx}
-                                  className="flex-1 border-r border-gray-200 last:border-r-0 p-2 relative"
+                                  onClick={(e) => {
+                                    // Only open booking modal if clicking on empty space (not on a booking) and day has opening hours
+                                    const target = e.target as HTMLElement;
+                                    const isBookingClick = target.closest('[data-booking-item]') !== null;
+                                    if (isClickable && !isBookingClick) {
+                                      const clickedDate = new Date(day);
+                                      clickedDate.setHours(0, 0, 0, 0);
+                                      setSelectedBookingDate(clickedDate);
+                                      setSelectedBookingTime(null);
+                                      setSelectedStaffId(staff.id);
+                                      setIsBookingSidebarOpen(true);
+                                    }
+                                  }}
+                                  className={`flex-1 border-r border-gray-200 last:border-r-0 p-2 relative ${
+                                    !hasOpeningHours ? "bg-gray-100 opacity-50" : ""
+                                  } ${isClickable ? "cursor-pointer hover:bg-gray-50/50" : ""}`}
+                                  title={!hasOpeningHours ? "Branch is closed on this day" : ""}
                                 >
                                   <div className="space-y-2">
                                     {dayBookings.map((booking) => {
@@ -1872,8 +2116,17 @@ export default function Calendar() {
                                       return (
                                         <div
                                           key={booking.id}
-                                          onClick={() => handleBookingClick(booking)}
-                                          className={`p-2 rounded border cursor-pointer ${getStatusColor(booking.status)} relative`}
+                                          data-booking-item
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleBookingClick(booking);
+                                          }}
+                                          className="p-2 border cursor-pointer relative"
+                                          style={{
+                                            backgroundColor: getStatusColor(booking.status),
+                                            borderRadius: '3px',
+                                            borderColor: 'transparent',
+                                          }}
                                         >
                                           {/* Status Icon - Top Right */}
                                           <div className="absolute top-1.5 right-1.5">
@@ -1882,20 +2135,27 @@ export default function Calendar() {
                                           
                                           {/* Content - Time and Service on left, Name on right */}
                                           <div className="flex items-start gap-2 pr-6">
-                                            {/* Time and Service on the left */}
-                                            <div className="shrink-0 flex flex-col">
+                                            {/* Time on the left */}
+                                            <div className="shrink-0">
                                               <div className="text-[10px] font-medium text-gray-700 whitespace-nowrap">
                                                 {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
                                               </div>
-                                              <div className="text-[10px] text-gray-600 truncate leading-tight mt-0.5">
-                                                {booking.service}
-                                              </div>
+                                              {booking.duration >= 30 && (
+                                                <div className="text-[10px] text-gray-600 truncate leading-tight mt-0.5">
+                                                  {booking.service}
+                                                </div>
+                                              )}
                                             </div>
                                             
-                                            {/* Name on the right */}
+                                            {/* Name and Service (if < 30 mins) on the right */}
                                             <div className="flex-1 min-w-0">
                                               <div className="text-xs font-bold text-gray-900 truncate leading-tight">
                                                 {booking.customer.name}
+                                                {booking.duration < 30 && (
+                                                  <span className="text-[10px] font-normal text-gray-600 ml-1.5">
+                                                    {booking.service}
+                                                  </span>
+                                                )}
                                               </div>
                                             </div>
                                           </div>
@@ -1933,12 +2193,31 @@ export default function Calendar() {
                         const visibleBookings = dayBookings.slice(0, 3);
                         const moreCount = dayBookings.length - 3;
 
+                        const hasOpeningHours = getOpeningHoursForDay(day) !== null;
+                        const isClickable = canAddBooking && hasOpeningHours && isCurrentMonth;
+
                         return (
                           <div
                             key={idx}
+                            onClick={(e) => {
+                              // Only open booking modal if clicking on empty space (not on a booking) and day has opening hours
+                              const target = e.target as HTMLElement;
+                              const isBookingClick = target.closest('[data-booking-item]') !== null;
+                              if (isClickable && !isBookingClick) {
+                                const clickedDate = new Date(day);
+                                clickedDate.setHours(0, 0, 0, 0);
+                                setSelectedBookingDate(clickedDate);
+                                setSelectedBookingTime(null);
+                                setSelectedStaffId(null); // Clear staff ID for month view as there's no specific staff context
+                                setIsBookingSidebarOpen(true);
+                              }
+                            }}
                             className={`min-h-[120px] border-r border-b border-gray-200 p-2 ${
                               !isCurrentMonth ? "bg-gray-50" : ""
-                            } ${isToday ? "bg-primary/5" : ""}`}
+                            } ${isToday ? "bg-primary/5" : ""} ${
+                              !hasOpeningHours && isCurrentMonth ? "bg-gray-100 opacity-50" : ""
+                            } ${isClickable ? "cursor-pointer hover:bg-gray-50/50" : ""}`}
+                            title={!hasOpeningHours && isCurrentMonth ? "Branch is closed on this day" : ""}
                           >
                             <div className={`text-sm font-semibold mb-1 ${isCurrentMonth ? "text-gray-900" : "text-gray-400"} ${isToday ? "text-primary" : ""}`}>
                               {day.getDate()}
@@ -1950,8 +2229,17 @@ export default function Calendar() {
                                 return (
                                   <div
                                     key={booking.id}
-                                    onClick={() => handleBookingClick(booking)}
-                                    className={`p-1.5 rounded text-[10px] cursor-pointer border ${getStatusColor(booking.status)} relative`}
+                                    data-booking-item
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleBookingClick(booking);
+                                    }}
+                                    className="p-1.5 text-[10px] cursor-pointer border relative"
+                                    style={{
+                                      backgroundColor: getStatusColor(booking.status),
+                                      borderRadius: '3px',
+                                      borderColor: 'transparent',
+                                    }}
                                   >
                                     {/* Status Icon - Top Right */}
                                     <div className="absolute top-1 right-1">
@@ -1960,20 +2248,27 @@ export default function Calendar() {
                                     
                                     {/* Content - Time and Service on left, Name on right */}
                                     <div className="flex items-start gap-1.5 pr-5">
-                                      {/* Time and Service on the left */}
-                                      <div className="shrink-0 flex flex-col">
+                                      {/* Time on the left */}
+                                      <div className="shrink-0">
                                         <div className="text-[9px] font-medium text-gray-700 whitespace-nowrap">
                                           {formatTime12Hour(bookingStart)} - {formatTime12Hour(bookingEnd)}
                                         </div>
-                                        <div className="text-[9px] text-gray-600 truncate leading-tight">
-                                          {booking.service}
-                                        </div>
+                                        {booking.duration >= 30 && (
+                                          <div className="text-[9px] text-gray-600 truncate leading-tight">
+                                            {booking.service}
+                                          </div>
+                                        )}
                                       </div>
                                       
-                                      {/* Name on the right */}
+                                      {/* Name and Service (if < 30 mins) on the right */}
                                       <div className="flex-1 min-w-0">
                                         <div className="text-[10px] font-bold text-gray-900 truncate leading-tight">
                                           {booking.customer.name}
+                                          {booking.duration < 30 && (
+                                            <span className="text-[9px] font-normal text-gray-600 ml-1.5">
+                                              {booking.service}
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
@@ -1998,7 +2293,7 @@ export default function Calendar() {
         </div>
 
         {/* Pending Bookings Sidebar */}
-        {/* <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full max-h-screen">
+        <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full max-h-screen">
           <div className="p-6 pb-4 flex-shrink-0">
             <div className="flex items-center gap-2 mb-4">
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2103,7 +2398,7 @@ export default function Calendar() {
             )}
             </div>
           </div>
-        </div> */}
+        </div>
       </div>
 
       {/* Edit Booking Sidebar */}
@@ -2127,16 +2422,20 @@ export default function Calendar() {
         <AddBookingSidebar
           initialDate={selectedBookingDate || undefined}
           initialTime={selectedBookingTime || undefined}
+          selectedStaffId={selectedStaffId}
           onClose={() => {
             setIsBookingSidebarOpen(false);
             setSelectedBookingDate(null);
             setSelectedBookingTime(null);
+            setSelectedStaffId(null);
           }}
           onSave={(customerName: string) => {
             fetchBookings();
+            fetchAllBookingsForCalendar();
             setIsBookingSidebarOpen(false);
             setSelectedBookingDate(null);
             setSelectedBookingTime(null);
+            setSelectedStaffId(null);
             setSuccessMessage(`${customerName} was added to the bookings.`);
             setShowSuccessNotification(true);
             // Auto-hide notification after 3 seconds
@@ -2174,152 +2473,499 @@ function EditBookingSidebar({
   onClose: () => void;
   onSave: () => void;
 }) {
-  const [formData, setFormData] = useState<{
-    service: string;
-    staff: string;
-    scheduledOn: string;
-    duration: number;
-    payment: string;
-    status: "Pending" | "Confirmed" | "Started" | "Completed" | "Cancelled";
-  }>({
-    service: booking.service,
-    staff: booking.staff.id,
-    scheduledOn: booking.scheduledOn,
-    duration: booking.duration,
-    payment: booking.payment,
-    status: booking.status,
-  });
+  const [status, setStatus] = useState<"Pending" | "Confirmed" | "Started" | "Completed" | "Cancelled" | "No Show">(booking.status as any || "Pending");
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isCustomerMenuOpen, setIsCustomerMenuOpen] = useState(false);
+  const [isDeclinePopupOpen, setIsDeclinePopupOpen] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
+  const [isDeclining, setIsDeclining] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const customerMenuRef = useRef<HTMLDivElement>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
+  // Parse scheduled date
+  const scheduledDate = booking.scheduledOn ? new Date(booking.scheduledOn) : new Date();
+  const formattedDate = scheduledDate.toLocaleDateString('en-US', { 
+    weekday: 'short', 
+    day: 'numeric', 
+    month: 'short', 
+    year: 'numeric' 
+  });
+  const formattedTime = scheduledDate.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
 
+  // Extract customer email if available (from booking data structure)
+  const customerEmail = (booking as any).customer?.email || "";
+
+  // Get services from booking - if it's an array, use it; otherwise create array from single service
+  const bookingServices = (booking as any).services || [{
+    id: booking.id,
+    name: booking.service,
+    duration: booking.duration,
+    price: (booking as any).price || 0,
+    staff_id: booking.staff.id,
+    staff: booking.staff
+  }];
+
+  const totalPrice = bookingServices.reduce((sum: number, service: any) => sum + (service.price || 0), 0);
+  const totalDuration = bookingServices.reduce((sum: number, service: any) => sum + (service.duration || 0), 0);
+  const paymentMethod = (booking as any).payment || "Credit Card";
+
+  // Status options with icons
+  const statusOptions = [
+    { 
+      value: "Pending", 
+      label: "Pending", 
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3" />
+        </svg>
+      )
+    },
+    { 
+      value: "Confirmed", 
+      label: "Confirmed", 
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" />
+        </svg>
+      )
+    },
+    { 
+      value: "Started", 
+      label: "Started", 
+      icon: (
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      )
+    },
+    { 
+      value: "Completed", 
+      label: "Completed", 
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" />
+        </svg>
+      )
+    },
+    { 
+      value: "Cancelled", 
+      label: "Cancelled", 
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" strokeWidth={2} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 9l-6 6m0-6l6 6" />
+        </svg>
+      )
+    },
+    { 
+      value: "No Show", 
+      label: "No Show", 
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9l-12 12" />
+          <circle cx="18" cy="9" r="3" strokeWidth={2} />
+        </svg>
+      )
+    },
+  ];
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setIsStatusDropdownOpen(false);
+      }
+      if (customerMenuRef.current && !customerMenuRef.current.contains(event.target as Node)) {
+        setIsCustomerMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleStatusChange = (newStatus: string) => {
+    setStatus(newStatus as any);
+    setIsStatusDropdownOpen(false);
+  };
+
+  const handleDecline = async () => {
+    if (!declineReason.trim()) {
+      return;
+    }
+
+    setIsDeclining(true);
     try {
-      await axiosClient.put(`/bookings/${booking.id}`, formData);
+      await axiosClient.post("/bookings/decline", {
+        booking_id: booking.id,
+        reason: declineReason,
+      });
+      setIsDeclinePopupOpen(false);
+      setDeclineReason("");
+      onSave(); // Refresh bookings
+      onClose(); // Close sidebar
+    } catch (error) {
+      console.error("Error declining booking:", error);
+      alert("Failed to decline booking. Please try again.");
+    } finally {
+      setIsDeclining(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    setIsSaving(true);
+    try {
+      await axiosClient.put(`/bookings/${booking.id}`, {
+        status: status,
+      });
       onSave();
+      onClose();
     } catch (error) {
       console.error("Error updating booking:", error);
+      alert("Failed to update booking. Please try again.");
     } finally {
       setIsSaving(false);
     }
   };
 
+  // Get customer initials for avatar
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
+  };
+
+  const currentStatusOption = statusOptions.find(opt => opt.value === status) || statusOptions[0];
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex justify-end">
-      <div className="w-full max-w-md bg-white h-full shadow-xl overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">Edit Booking</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Booking ID</label>
-            <input
-              type="text"
-              value={`#${booking.bookingId}`}
-              disabled
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-            <input
-              type="text"
-              value={booking.customer.name}
-              disabled
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Service</label>
-            <input
-              type="text"
-              value={formData.service}
-              onChange={(e) => setFormData({ ...formData, service: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Scheduled On</label>
-            <input
-              type="datetime-local"
-              value={formData.scheduledOn}
-              onChange={(e) => setFormData({ ...formData, scheduledOn: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
-            <input
-              type="number"
-              value={formData.duration}
-              onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-            <select
-              value={formData.payment}
-              onChange={(e) => setFormData({ ...formData, payment: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="Cash">Cash</option>
-              <option value="Online">Online</option>
-              <option value="Card">Card</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="Pending">Pending</option>
-              <option value="Confirmed">Confirmed</option>
-              <option value="Started">Started</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <Button
-              type="button"
-              variant="transparent"
+    <>
+      <div className="fixed inset-0 z-50 flex justify-end">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/50"
+          onClick={onClose}
+        />
+        
+        {/* Sidebar */}
+        <div className="flex flex-col relative w-[32%] bg-[#F9F9F9] h-full shadow-xl overflow-y-auto">
+          {/* Header */}
+          <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between z-10">
+            <button
               onClick={onClose}
-              className="flex-1"
+              className="cursor-pointer"
             >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={isSaving}
-              className="flex-1"
-            >
-              {isSaving ? "Saving..." : "Save Changes"}
-            </Button>
+              <svg width="20" height="20" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18.75 6.25L6.25084 18.7492M18.7492 18.75L6.25 6.25089" stroke="black" strokeWidth="1.5625" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            
+            {/* Date and Time */}
+            <div className="flex flex-col items-center">
+              <span className="text-sm font-medium text-gray-900">{formattedDate}</span>
+              <span className="text-sm text-gray-600">{formattedTime}</span>
+            </div>
+
+            {/* Status Selector */}
+            <div className="relative" ref={statusDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                className="px-3 py-1.5 bg-gray-100 rounded-full flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+              >
+                <span>{currentStatusOption.label}</span>
+                <svg 
+                  className={`w-4 h-4 transition-transform ${isStatusDropdownOpen ? 'rotate-180' : ''}`}
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Status Dropdown */}
+              {isStatusDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                  {statusOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleStatusChange(option.value)}
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg border-b border-gray-100 last:border-b-0 text-gray-700"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-gray-600">{option.icon}</span>
+                        <span className="text-sm font-medium text-gray-900">{option.label}</span>
+                      </div>
+                      {status === option.value && (
+                        <div className="w-4 h-4 rounded-full bg-[#7B2CBF]"></div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </form>
+
+          {/* Content */}
+          <div className="flex-1 p-6">
+            {/* Customer Card */}
+            <div className="bg-white rounded-lg p-4 mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-1">
+                {/* Customer Avatar */}
+                {booking.customer.avatar ? (
+                  <img 
+                    src={booking.customer.avatar} 
+                    alt={booking.customer.name}
+                    className="w-12 h-12 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
+                    <span className="text-sm font-semibold text-gray-600">
+                      {getInitials(booking.customer.name)}
+                    </span>
+                  </div>
+                )}
+                
+                {/* Customer Info */}
+                <div className="flex-1">
+                  <h3 className="text-base font-semibold text-gray-900">{booking.customer.name}</h3>
+                  {customerEmail && (
+                    <p className="text-sm text-gray-500">{customerEmail}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Three Dots Menu */}
+              <div className="relative" ref={customerMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerMenuOpen(!isCustomerMenuOpen)}
+                  className="w-8 h-8 rounded flex items-center justify-center bg-gray-100 hover:bg-black transition-colors group"
+                >
+                  <svg className="w-5 h-5 text-gray-600 group-hover:text-white transition-colors" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="5" r="1.5"/>
+                    <circle cx="12" cy="12" r="1.5"/>
+                    <circle cx="12" cy="19" r="1.5"/>
+                  </svg>
+                </button>
+
+                {/* Customer Dropdown Menu */}
+                {isCustomerMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomerMenuOpen(false);
+                        // TODO: Implement view details
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 first:rounded-t-lg"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomerMenuOpen(false);
+                        // TODO: Implement edit customer
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 last:rounded-b-lg border-t border-gray-100"
+                    >
+                      Edit Customer
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Services Section */}
+            <div className="mb-6">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Services</h3>
+              <div className="space-y-4">
+                {bookingServices.map((service: any, index: number) => {
+                  const serviceStartTime = new Date(scheduledDate);
+                  let cumulativeMinutes = 0;
+                  for (let i = 0; i < index; i++) {
+                    cumulativeMinutes += bookingServices[i].duration || 0;
+                  }
+                  serviceStartTime.setMinutes(serviceStartTime.getMinutes() + cumulativeMinutes);
+                  const serviceTime = serviceStartTime.toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true 
+                  });
+
+                  return (
+                    <div key={service.id || index} className="bg-white rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-gray-900">{service.name || booking.service}</h4>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {serviceTime} • {service.duration || booking.duration} min
+                          </p>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900">
+                          ${(service.price || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      {/* Staff Selector */}
+                      <div className="mt-3">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                          {service.staff?.avatar ? (
+                            <img 
+                              src={service.staff.avatar} 
+                              alt={service.staff.name}
+                              className="w-6 h-6 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                              <span className="text-xs font-semibold text-gray-600">
+                                {getInitials(service.staff?.name || booking.staff.name)}
+                              </span>
+                            </div>
+                          )}
+                          <span className="text-xs font-medium text-gray-700 flex-1">
+                            {service.staff?.name || booking.staff.name}
+                          </span>
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Total Duration */}
+              <div className="mt-4 text-right">
+                <span className="text-sm text-gray-600">
+                  {totalDuration >= 60 
+                    ? `${Math.floor(totalDuration / 60)} hour${Math.floor(totalDuration / 60) !== 1 ? 's' : ''}${totalDuration % 60 > 0 ? ` ${totalDuration % 60} min` : ''}`
+                    : `${totalDuration} min`
+                  }
+                </span>
+              </div>
+
+              {/* Add Service Button */}
+              <button
+                type="button"
+                className="mt-4 w-full py-3 bg-black text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Service
+              </button>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="sticky bottom-0 bg-white p-6 border-t border-gray-200">
+            {/* Total */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <span className="text-sm font-medium text-gray-900">Total</span>
+                <span className="text-xs text-gray-400 ml-2">(Paid - {paymentMethod})</span>
+              </div>
+              <span className="text-lg font-semibold text-gray-900">${totalPrice.toFixed(2)}</span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeclinePopupOpen(true)}
+                className="flex-1 py-2.5 bg-white border border-red-500 text-red-500 rounded-lg font-medium text-sm hover:border-primary hover:text-primary transition-colors"
+              >
+                Decline
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={isSaving}
+                className="flex-1 py-2.5 bg-primary text-white rounded-lg font-medium text-sm hover:bg-[#6B21B8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? "Confirming..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+
+      {/* Decline Popup */}
+      {isDeclinePopupOpen && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 relative">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Decline Booking</h2>
+              <button
+                onClick={() => {
+                  setIsDeclinePopupOpen(false);
+                  setDeclineReason("");
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-sm text-gray-700 mb-4">Are you sure you want to decline booking?</p>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Enter Reason</label>
+                <textarea
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  placeholder="Add your reason here"
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#7B2CBF] resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeclinePopupOpen(false);
+                  setDeclineReason("");
+                }}
+                className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-[10px] font-medium text-xs hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDecline}
+                disabled={!declineReason.trim() || isDeclining}
+                className="flex-1 py-2.5 bg-primary text-white rounded-[10px] font-medium text-xs hover:bg-[#6B21B8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeclining ? "Declining..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2329,14 +2975,16 @@ function AddBookingSidebar({
   onSave,
   initialDate,
   initialTime,
+  selectedStaffId,
 }: {
   onClose: () => void;
   onSave: (customerName: string) => void;
   initialDate?: Date;
   initialTime?: string;
+  selectedStaffId?: string | null;
 }) {
   const { currentBranch } = useBranch();
-  const [currentStep, setCurrentStep] = useState(initialDate && initialTime ? 2 : 1); // Start at step 2 if date/time are pre-selected
+  const [currentStep, setCurrentStep] = useState(1); // Always start at step 1
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; email: string; avatar?: string } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(initialDate || new Date());
@@ -2525,9 +3173,9 @@ function AddBookingSidebar({
     // Create a unique key for this fetch request
     const dateStr = formatDateForAPI(selectedDate);
     const timeStr = convertTo24Hour(selectedTime);
-    const fetchKey = `${currentBranch.id}-${dateStr}-${timeStr}`;
+    const fetchKey = `${currentBranch.id}-${dateStr}-${timeStr}-${selectedStaffId || 'all'}`;
     
-    // Prevent duplicate calls for the same date/time or if already fetching
+    // Prevent duplicate calls for the same date/time/staff or if already fetching
     if (lastFetchedKey.current === fetchKey || isFetchingRef.current) {
       return;
     }
@@ -2538,11 +3186,18 @@ function AddBookingSidebar({
     
     try {
       // Note: branch_id will be automatically added by axios interceptor
+      const params: { date: string; time: string; staff_id?: string } = { 
+        date: dateStr,
+        time: timeStr,
+      };
+      
+      // Add staff_id if a staff member is selected
+      if (selectedStaffId) {
+        params.staff_id = selectedStaffId;
+      }
+      
       const response = await axiosClient.get("/services/get-services-available-staff", {
-        params: { 
-          date: dateStr,
-          time: timeStr,
-        },
+        params,
       });
       
       const servicesData = response.data?.data?.services || response.data?.services || {};
@@ -2615,7 +3270,7 @@ function AddBookingSidebar({
       setIsLoadingServices(false);
       isFetchingRef.current = false;
     }
-  }, [currentBranch?.id, selectedDate, selectedTime]);
+  }, [currentBranch?.id, selectedDate, selectedTime, selectedStaffId]);
 
   // Fetch services when step 3 is reached and date/time are selected
   useEffect(() => {
@@ -2850,14 +3505,14 @@ function AddBookingSidebar({
       if (exists) {
         return prev.filter(s => s.id !== service.id);
       } else {
-        // Add service with first staff member as default (for "Any Team Member")
-        const firstStaffId = service.staff && service.staff.length > 0 ? String(service.staff[0].id) : undefined;
+        // If a staff member is selected from calendar, use that; otherwise use first staff member as default
+        const teamMemberId = selectedStaffId || (service.staff && service.staff.length > 0 ? String(service.staff[0].id) : undefined);
         return [...prev, { 
           id: service.id, 
           name: service.name, 
           duration: service.duration, 
           price: typeof service.price === 'number' ? service.price : parseFloat(service.price || 0),
-          teamMember: firstStaffId, // Store first staff ID for "Any Team Member"
+          teamMember: teamMemberId,
         }];
       }
     });
@@ -3395,7 +4050,23 @@ function AddBookingSidebar({
 
                                   <span className="text-xs font-medium text-black/40">{service.duration} min</span>
 
-                                {isSelected && (
+                                {isSelected && selectedStaffId && (() => {
+                                  const serviceData = services.find(s => s.id === service.id);
+                                  const availableStaff = serviceData?.staff || [];
+                                  const selectedStaff = availableStaff.find(s => String(s.id) === String(selectedStaffId));
+                                  return selectedStaff ? (
+                                    <div className="mt-2 flex items-center gap-1 px-2 py-2 bg-[#F9F9F9] border border-black/10 rounded-lg">
+                                      <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[22px] h-[22px]">
+                                        <circle opacity="0.1" cx="15" cy="15" r="15" fill="#7B2CBF"/>
+                                        <path d="M20.4163 21.6665V19.9752C20.4163 18.9399 19.9503 17.9248 19.0083 17.4953C17.8593 16.9716 16.4813 16.6665 14.9997 16.6665C13.5181 16.6665 12.1401 16.9716 10.9911 17.4953C10.0491 17.9248 9.58301 18.9399 9.58301 19.9752V21.6665" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                                        <path d="M14.9997 14.1668C16.6105 14.1668 17.9163 12.861 17.9163 11.2502C17.9163 9.63933 16.6105 8.3335 14.9997 8.3335C13.3888 8.3335 12.083 9.63933 12.083 11.2502C12.083 12.861 13.3888 14.1668 14.9997 14.1668Z" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                      <span className="text-xs font-medium text-black">{selectedStaff.name}</span>
+                                    </div>
+                                  ) : null;
+                                })()}
+
+                                {isSelected && !selectedStaffId && (
                                   <div className="mt-2 relative">
                                     <button 
                                       onClick={(e) => {
@@ -3560,11 +4231,13 @@ function AddBookingSidebar({
                     const serviceData = services.find(s => s.id === service.id);
                     const availableStaff = serviceData?.staff || [];
                     const firstStaffId = availableStaff.length > 0 ? String(availableStaff[0].id) : null;
-                    const teamMemberId = service.teamMember;
+                    const teamMemberId = selectedStaffId || service.teamMember;
                     
-                    // If no team member selected or it's the first staff member, treat as "Any Team Member"
-                    const isAnySelected = !teamMemberId || teamMemberId === firstStaffId;
-                    const teamMember = isAnySelected
+                    // If a staff is selected from calendar, use that; otherwise check if no team member selected or it's the first staff member, treat as "Any Team Member"
+                    const isAnySelected = !selectedStaffId && (!teamMemberId || teamMemberId === firstStaffId);
+                    const teamMember = selectedStaffId
+                      ? serviceData?.staff?.find(tm => String(tm.id) === String(selectedStaffId)) || { id: selectedStaffId, name: "Selected Staff" }
+                      : isAnySelected
                       ? { id: "any", name: "Any Team Member" }
                       : serviceData?.staff?.find(tm => String(tm.id) === String(teamMemberId));
                     
@@ -3580,23 +4253,24 @@ function AddBookingSidebar({
                               <span className="text-xs font-medium text-black/40">
                                 {getServiceStartTime(index)} | {service.duration} min
                               </span>
-                              <div className="mt-2 relative">
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOpenTeamMemberDropdown(openTeamMemberDropdown === service.id ? null : service.id);
-                                  }}
-                                  className="flex items-center gap-1 px-2 py-2 bg-[#F9F9F9] hover:bg-[#F5F3F7] border border-black/10 rounded-lg text-xs font-medium text-black cursor-pointer transition-all duration-300"
-                                >
-                                  <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[22px] h-[22px]">
-                                    <circle opacity="0.1" cx="15" cy="15" r="15" fill="#7B2CBF"/>
-                                    <path d="M20.4163 21.6665V19.9752C20.4163 18.9399 19.9503 17.9248 19.0083 17.4953C17.8593 16.9716 16.4813 16.6665 14.9997 16.6665C13.5181 16.6665 12.1401 16.9716 10.9911 17.4953C10.0491 17.9248 9.58301 18.9399 9.58301 19.9752V21.6665" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M14.9997 14.1668C16.6105 14.1668 17.9163 12.861 17.9163 11.2502C17.9163 9.63933 16.6105 8.3335 14.9997 8.3335C13.3888 8.3335 12.083 9.63933 12.083 11.2502C12.083 12.861 13.3888 14.1668 14.9997 14.1668Z" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                                  <span>{teamMember?.name || "Any Team Member"}</span>
-                                  <Arrow direction={openTeamMemberDropdown === service.id ? "up" : "down"} opacity={1} className="w-4" />
-                            </button>
-                                {openTeamMemberDropdown === service.id && (() => {
+                              {!selectedStaffId ? (
+                                <div className="mt-2 relative">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenTeamMemberDropdown(openTeamMemberDropdown === service.id ? null : service.id);
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-2 bg-[#F9F9F9] hover:bg-[#F5F3F7] border border-black/10 rounded-lg text-xs font-medium text-black cursor-pointer transition-all duration-300"
+                                  >
+                                    <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[22px] h-[22px]">
+                                      <circle opacity="0.1" cx="15" cy="15" r="15" fill="#7B2CBF"/>
+                                      <path d="M20.4163 21.6665V19.9752C20.4163 18.9399 19.9503 17.9248 19.0083 17.4953C17.8593 16.9716 16.4813 16.6665 14.9997 16.6665C13.5181 16.6665 12.1401 16.9716 10.9911 17.4953C10.0491 17.9248 9.58301 18.9399 9.58301 19.9752V21.6665" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                                      <path d="M14.9997 14.1668C16.6105 14.1668 17.9163 12.861 17.9163 11.2502C17.9163 9.63933 16.6105 8.3335 14.9997 8.3335C13.3888 8.3335 12.083 9.63933 12.083 11.2502C12.083 12.861 13.3888 14.1668 14.9997 14.1668Z" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                    <span>{teamMember?.name || "Any Team Member"}</span>
+                                    <Arrow direction={openTeamMemberDropdown === service.id ? "up" : "down"} opacity={1} className="w-4" />
+                                  </button>
+                                  {openTeamMemberDropdown === service.id && (() => {
                                   const serviceData = services.find(s => s.id === service.id);
                                   const availableStaff = serviceData?.staff || [];
                                   const firstStaffId = availableStaff.length > 0 ? String(availableStaff[0].id) : null;
@@ -3677,7 +4351,17 @@ function AddBookingSidebar({
                           </div>
                                   );
                                 })()}
-                        </div>
+                                </div>
+                              ) : (
+                                <div className="mt-2 flex items-center gap-1 px-2 py-2 bg-[#F9F9F9] border border-black/10 rounded-lg">
+                                  <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[22px] h-[22px]">
+                                    <circle opacity="0.1" cx="15" cy="15" r="15" fill="#7B2CBF"/>
+                                    <path d="M20.4163 21.6665V19.9752C20.4163 18.9399 19.9503 17.9248 19.0083 17.4953C17.8593 16.9716 16.4813 16.6665 14.9997 16.6665C13.5181 16.6665 12.1401 16.9716 10.9911 17.4953C10.0491 17.9248 9.58301 18.9399 9.58301 19.9752V21.6665" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M14.9997 14.1668C16.6105 14.1668 17.9163 12.861 17.9163 11.2502C17.9163 9.63933 16.6105 8.3335 14.9997 8.3335C13.3888 8.3335 12.083 9.63933 12.083 11.2502C12.083 12.861 13.3888 14.1668 14.9997 14.1668Z" stroke="#7B2CBF" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                  <span className="text-xs font-medium text-black">{teamMember?.name || "Any Team Member"}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>

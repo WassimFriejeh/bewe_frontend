@@ -1,7 +1,7 @@
 // Simple test script to verify the reset password API integration
 const axios = require('axios');
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://bewe_api.test/api/v1";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://bewe_api.test/api";
 const API_KEY = process.env.NEXT_PUBLIC_API_SECRET_KEY || "^Ft*;.bS3+P9Pkr$&#mj=QF&@<y_hZ368Y£ky";
 
 const axiosClient = axios.create({
