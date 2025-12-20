@@ -45,6 +45,7 @@ export default function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [user, setUser] = useState<any>(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { branchChangeKey } = useBranch();
@@ -159,11 +160,7 @@ export default function Sidebar() {
             {/* Logout Button */}
             <div className="px-3">
               <button
-                onClick={() => {
-                  localStorage.removeItem("auth_token");
-                  localStorage.removeItem("user_data");
-                  router.push("/auth/login");
-                }}
+                onClick={() => setShowLogoutModal(true)}
                 className={`
                 w-full sidebar-icon group
                 ${!isExpanded ? "flex items-center justify-center" : ""}
@@ -219,6 +216,67 @@ export default function Sidebar() {
           </Link>
         </div>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 relative">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Close"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+              <h2 className="text-xl font-semibold text-gray-900 absolute left-1/2 transform -translate-x-1/2">Logout</h2>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-sm text-gray-700 text-center">
+                Are you sure you want to logout?
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem("auth_token");
+                  localStorage.removeItem("user_data");
+                  router.push("/auth/login");
+                }}
+                className="flex-1 py-2.5 bg-primary text-white rounded-lg font-medium text-sm hover:bg-[#6B21B8] transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 }

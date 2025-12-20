@@ -44,14 +44,14 @@ export default function BranchSelector({ width, className = "" }: BranchSelector
     <div className={`relative ${className}`} ref={dropdownRef} style={widthStyle}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 px-5 py-2.5 cursor-pointer text-xs font-medium border border-black/20 rounded-[10px] transition-colors focus:outline-none ${
+        className={`flex items-center gap-2 px-5 py-2.5 cursor-pointer text-xs font-medium border border-black/20 rounded-[10px] transition-colors focus:outline-none whitespace-nowrap ${
           isOpen 
             ? "bg-black text-white" 
             : "bg-white hover:bg-black hover:text-white"
         }`}
       >
-        <span className="text-[#808080]">Branch:</span>
-        <span className="flex-1 text-left">{currentBranch?.label || "Select Branch"}</span>
+        <span className="text-[#808080] flex-shrink-0">Branch:</span>
+        <span className="flex-1 text-left whitespace-nowrap truncate min-w-0">{currentBranch?.label || "Select Branch"}</span>
         <svg
           className={`w-4 h-4 transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`}
           fill="none"
