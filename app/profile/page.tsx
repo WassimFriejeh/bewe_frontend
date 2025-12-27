@@ -67,11 +67,6 @@ export default function ProfilePage() {
           utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.10/build/js/utils.js",
         } as any);
 
-        // Set initial phone number if available
-        if (formData.phoneNumber) {
-          phoneInputRef.current.value = formData.phoneNumber;
-        }
-
         // Listen for country change
         phoneInputRef.current.addEventListener('countrychange', () => {
           if (itiRef.current) {
@@ -93,6 +88,14 @@ export default function ProfilePage() {
           }
         });
       }
+
+      // Update opacity of intl-tel-input wrapper
+      if (phoneInputRef.current?.parentElement) {
+        const wrapper = phoneInputRef.current.parentElement;
+        if (wrapper.classList.contains('iti')) {
+          wrapper.style.opacity = !formData.phoneNumber ? '0.5' : '1';
+        }
+      }
     }
 
     return () => {
@@ -101,12 +104,12 @@ export default function ProfilePage() {
         itiRef.current = null;
       }
     };
-  }, [selectedSection]);
+  }, [selectedSection, formData.phoneNumber]);
 
   return (
-    <div className="flex-1 min-h-screen bg-[#F9F9F9] -ml-6 -mr-6 -mt-6">
+    <div className="flex-1 min-h-screen bg-[#F9F9F9] -ml-6 -mr-6 -mt-6 flex flex-col">
       {/* Top Bar */}
-      <div className="">
+      <div className="flex-shrink-0">
         <div className="main-container flex items-center justify-between bg-white border-b border-gray-200 py-3">
           <h1 className="text-sm font-medium text-black flex items-center">
             <span className="opacity-30">bewe</span>
@@ -130,30 +133,56 @@ export default function ProfilePage() {
       </div>
 
       {/* Main Content */}
-      <div className="main-container py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="main-container py-6 flex-1 flex">
+        <div className="flex gap-6 items-stretch w-full">
           {/* Left Navigation */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h2 className="text-lg font-bold text-black mb-6">My Profile</h2>
+          <div>
+            <div className="bg-white rounded-lg shadow-sm p-4 h-full" style={{ width: "314px" }}>
+              <h2 className="text-lg font-bold text-black mb-4">My Profile</h2>
               <div className="space-y-2">
                 <button
                   onClick={() => setSelectedSection("Personal Information")}
-                  className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                  className={`w-full text-left px-6 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                     selectedSection === "Personal Information"
-                      ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:bg-gray-50"
+                      ? "text-black"
+                      : "text-black/60"
                   }`}
+                  style={{
+                    backgroundColor: selectedSection === "Personal Information" ? "#F5F3F7" : "transparent"
+                  }}
+                  onMouseEnter={(e) => {
+                    if (selectedSection !== "Personal Information") {
+                      e.currentTarget.style.backgroundColor = "#F5F3F7";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedSection !== "Personal Information") {
+                      e.currentTarget.style.backgroundColor = "transparent";
+                    }
+                  }}
                 >
                   Personal Information
                 </button>
                 <button
                   onClick={() => setSelectedSection("Change Password")}
-                  className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                  className={`w-full text-left px-6 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                     selectedSection === "Change Password"
-                      ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:bg-gray-50"
+                      ? "text-black"
+                      : "text-black/60"
                   }`}
+                  style={{
+                    backgroundColor: selectedSection === "Change Password" ? "#F5F3F7" : "transparent"
+                  }}
+                  onMouseEnter={(e) => {
+                    if (selectedSection !== "Change Password") {
+                      e.currentTarget.style.backgroundColor = "#F5F3F7";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedSection !== "Change Password") {
+                      e.currentTarget.style.backgroundColor = "transparent";
+                    }
+                  }}
                 >
                   Change Password
                 </button>
@@ -162,18 +191,18 @@ export default function ProfilePage() {
           </div>
 
           {/* Right Content */}
-          <div className="lg:col-span-3">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex-1">
+            <div className="p-6">
               {selectedSection === "Personal Information" && (
                 <div className="space-y-6">
                   <h2 className="text-lg font-bold text-black mb-6">Personal Information</h2>
                   
                   {/* First Name and Last Name Row */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4 w-full">
                     {/* First Name */}
                     <div>
                       <label className="block text-sm font-medium text-black mb-2">
-                        First Name <span className="text-red-500">*</span>
+                        First Name <span className="text-primary">*</span>
                       </label>
                       <input
                         type="text"
@@ -186,7 +215,7 @@ export default function ProfilePage() {
                     {/* Last Name */}
                     <div>
                       <label className="block text-sm font-medium text-black mb-2">
-                        Last Name <span className="text-red-500">*</span>
+                        Last Name <span className="text-primary">*</span>
                       </label>
                       <input
                         type="text"
@@ -198,11 +227,11 @@ export default function ProfilePage() {
                   </div>
 
                   {/* Email and Phone Number Row */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4 w-full">
                     {/* Email */}
                     <div>
                       <label className="block text-sm font-medium text-black mb-2">
-                        Email <span className="text-red-500">*</span>
+                        Email <span className="text-primary">*</span>
                       </label>
                       <div className="relative">
                         <input
@@ -221,15 +250,17 @@ export default function ProfilePage() {
 
                     {/* Phone Number */}
                     <div>
-                      <label className="block text-sm font-medium text-black mb-2">
-                        Phone Number <span className="text-red-500">*</span>
+                      <label className={`block text-sm font-medium text-black mb-2 ${!formData.phoneNumber ? 'opacity-50' : 'opacity-100'}`}>
+                        Phone Number <span className="text-primary">*</span>
                       </label>
                       <input
                         ref={phoneInputRef}
                         type="tel"
                         value={formData.phoneNumber}
-                        onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-black/10 rounded-lg bg-white focus:outline-none focus:border-primary text-sm"
+                        onChange={(e) => {
+                          setFormData({ ...formData, phoneNumber: e.target.value });
+                        }}
+                        className="w-full px-4 py-2.5 border border-black/10 rounded-lg bg-white focus:outline-none focus:border-primary text-sm placeholder:text-black/50"
                         placeholder="70 123 456"
                       />
                     </div>
@@ -239,7 +270,7 @@ export default function ProfilePage() {
                   <div className="pt-4">
                     <Button
                       variant="primary"
-                      className="w-full cursor-pointer"
+                      className="w-auto min-w-[150px] cursor-pointer"
                       onClick={() => {
                         // Handle save changes
                         console.log("Saving personal information:", formData);
@@ -255,26 +286,28 @@ export default function ProfilePage() {
                 <div className="space-y-6">
                   <h2 className="text-lg font-bold text-black mb-6">Change Password</h2>
                   
-                  {/* Old Password */}
-                  <div>
-                    <label className="block text-sm font-medium text-black mb-2">
-                      Old Password <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      value={passwordData.oldPassword}
-                      onChange={(e) => setPasswordData({ ...passwordData, oldPassword: e.target.value })}
-                      placeholder="Old Password"
-                      className="w-full px-4 py-2.5 border border-black/10 rounded-lg bg-white focus:outline-none focus:border-primary text-sm"
-                    />
-                  </div>
-
-                  {/* New Password and Confirm Password Row */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Old Password */}
+                    <div>
+                      <label className="block text-sm font-medium text-black mb-2">
+                        Old Password <span className="text-primary">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordData.oldPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, oldPassword: e.target.value })}
+                        placeholder="Old Password"
+                        className="w-full px-4 py-2.5 border border-black/10 rounded-lg bg-white focus:outline-none focus:border-primary text-sm"
+                      />
+                    </div>
+
+                    {/* Empty div to maintain grid layout */}
+                    <div></div>
+
                     {/* New Password */}
                     <div>
                       <label className="block text-sm font-medium text-black mb-2">
-                        New Password <span className="text-red-500">*</span>
+                        New Password <span className="text-primary">*</span>
                       </label>
                       <div className="relative">
                         <input
@@ -301,7 +334,7 @@ export default function ProfilePage() {
                     {/* Confirm Password */}
                     <div>
                       <label className="block text-sm font-medium text-black mb-2">
-                        Confirm Password <span className="text-red-500">*</span>
+                        Confirm Password <span className="text-primary">*</span>
                       </label>
                       <div className="relative">
                         <input

@@ -90,6 +90,17 @@ export default function Customers() {
               total_spending: 126,
               type: "Offline",
             },
+            {
+              id: "2",
+              first_name: "John",
+              last_name: "Smith",
+              email: "johnsmith@gmail.com",
+              phone: "+961 789 012",
+              notes: "Lorem ipsum dolor sit amet consectetur vestibulum tortor.",
+              created_at: "2025-08-28T00:00:00Z",
+              total_spending: 250,
+              type: "bewe App",
+            },
           ];
 
     return source.map((customer: any, index: number): CustomerRow => {
@@ -267,12 +278,12 @@ export default function Customers() {
       <div className="p-3 md:p-6">
         <div className="bg-white rounded-lg shadow-sm">
           {/* Header / Actions */}
-          <div className="p-3 md:p-6 border-b border-gray-200">
+          <div className="p-3 md:p-6">
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
                 <h2 className="text-xl md:text-2xl font-bold text-black">Customers</h2>
               </div>
-              <div className="flex flex-col items-end gap-2">
+              <div>
                 <Button
                   variant="primary"
                   className="whitespace-nowrap flex items-center gap-2 cursor-pointer flex-shrink-0 text-sm md:text-base px-5 py-2.5"
@@ -305,108 +316,143 @@ export default function Customers() {
                     />
                   </svg>
                 </Button>
-                <div className="relative flex-shrink-0 w-full">
-                  <select
-                    value={clientTypeFilter}
-                    onChange={(e) => {
-                      setClientTypeFilter(e.target.value as any);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full appearance-none pl-3 pr-8 py-2.5 text-xs md:text-sm border border-black/20 rounded-[10px] bg-white text-black cursor-pointer focus:outline-none transition-colors hover:bg-black hover:text-white"
-                  >
-                    <option value="All">Client Type: Select</option>
-                    <option value="Offline">Client Type: Offline</option>
-                    <option value="bewe App">Client Type: bewe App</option>
-                  </select>
-                  <svg
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40 pointer-events-none"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div>
               </div>
             </div>
 
-            {/* Search bar */}
-            <div className="w-full max-w-md">
-              <SearchInput
-                placeholder="Search by customer name, email or phone number"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
+            {/* Search bar and Dropdown */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="w-full max-w-md">
+                <SearchInput
+                  placeholder="Search by customer name, email or phone number"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+              <div className="relative flex-shrink-0">
+                <select
+                  value={clientTypeFilter}
+                  onChange={(e) => {
+                    setClientTypeFilter(e.target.value as any);
+                    setCurrentPage(1);
+                  }}
+                  className="appearance-none pl-3 pr-8 py-2.5 text-xs md:text-sm border border-black/20 rounded-[10px] bg-white text-black cursor-pointer focus:outline-none transition-colors hover:bg-black hover:text-white"
+                  style={{ width: "200px" }}
+                >
+                  <option value="All">Client Type: Select</option>
+                  <option value="Offline">Client Type: Offline</option>
+                  <option value="bewe App">Client Type: bewe App</option>
+                </select>
+                <svg
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40 pointer-events-none"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
             </div>
           </div>
 
           {/* Table - Desktop */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  {([
-                    "customer",
-                    "type",
-                    "email",
-                    "phone",
-                    "notes",
-                    "createdOn",
-                    "totalSpending",
-                  ] as const).map((column) => (
-                    <th
-                      key={column}
-                      className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100 first:rounded-tl-lg last:rounded-tr-lg whitespace-nowrap"
-                      onClick={() => handleSort(column === "customer" ? "name" : column)}
-                    >
-                      <div className="flex items-center gap-2">
-                        {column === "customer" && "Customer"}
-                        {column === "type" && "Type"}
-                        {column === "email" && "Email Address"}
-                        {column === "phone" && "Phone Number"}
-                        {column === "notes" && "Notes"}
-                        {column === "createdOn" && "Created on"}
-                        {column === "totalSpending" && "Total Spending"}
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
+          <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden border border-black/10 mx-4">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-white border-b border-gray-200">
+                  <tr>
+                    {([
+                      "customer",
+                      "type",
+                      "email",
+                      "phone",
+                      "notes",
+                      "createdOn",
+                      "totalSpending",
+                    ] as const).map((column) => {
+                      const isSorted = sortColumn === (column === "customer" ? "name" : column);
+                      return (
+                        <th
+                          key={column}
+                          className={`group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer ${
+                            column === "totalSpending" ? "" : ""
+                          }`}
+                          onClick={() => handleSort(column === "customer" ? "name" : column)}
                         >
-                          <path
-                            d="M4 6L8 2L12 6M4 10L8 14L12 10"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="px-6 py-4 text-right text-sm font-medium text-black whitespace-nowrap">Action</th>
-                </tr>
-              </thead>
-              <tbody>
+                          <div className="flex items-center gap-2">
+                            {column === "customer" && "Customer"}
+                            {column === "type" && "Type"}
+                            {column === "email" && "Email Address"}
+                            {column === "phone" && "Phone Number"}
+                            {column === "notes" && "Notes"}
+                            {column === "createdOn" && "Created on"}
+                            {column === "totalSpending" && "Total Spending"}
+                            <svg 
+                              width="15" 
+                              height="15" 
+                              viewBox="0 0 18 18" 
+                              fill="none" 
+                              xmlns="http://www.w3.org/2000/svg"
+                              className={`transition-colors ${
+                                isSorted 
+                                  ? "text-primary opacity-100" 
+                                  : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
+                              }`}
+                            >
+                              <path 
+                                d="M5.25 3V15" 
+                                stroke="currentColor" 
+                                strokeWidth="1.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                              />
+                              <path 
+                                d="M12.75 14.25V3" 
+                                stroke="currentColor" 
+                                strokeWidth="1.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                              />
+                              <path 
+                                d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
+                                stroke="currentColor" 
+                                strokeWidth="1.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                              />
+                              <path 
+                                d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
+                                stroke="currentColor" 
+                                strokeWidth="1.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                        </th>
+                      );
+                    })}
+                    <th className="px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
         {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-10 text-center text-sm text-black/60">
+                    <td colSpan={8} className="px-5 py-4 text-center text-xs text-gray-500">
                       Loading customers...
                     </td>
                   </tr>
                 ) : paginatedCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-10 text-center text-sm text-black/60">
+                    <td colSpan={8} className="px-5 py-4 text-center text-xs text-gray-500">
                       No customers found.
                     </td>
                   </tr>
@@ -414,49 +460,60 @@ export default function Customers() {
                   paginatedCustomers.map((customer) => (
                     <tr 
                       key={customer.id} 
-                      className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50/60 cursor-pointer"
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
                       onClick={() => {
                         setSelectedCustomer(customer);
                         setIsCustomerDetailsOpen(true);
                       }}
                     >
-                      <td className="px-6 py-4 align-top">
+                      <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center text-xs font-semibold text-black">
+                          <div className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center text-xs font-normal text-black">
                             {customer.initial}
-              </div>
+                          </div>
                           <div>
-                            <div className="text-sm font-medium text-black">{customer.name}</div>
+                            <div className="text-xs font-normal text-black/80">{customer.name}</div>
                             <div className="text-xs text-black/40">ID #{customer.id}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 align-top">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-black/5 text-black">
-                          {customer.type}
-                        </span>
+                      <td className="px-5 py-4 text-xs font-normal text-black/80 capitalize">
+                        {customer.type}
                       </td>
-                      <td className="px-6 py-4 align-top text-sm text-black/80">{customer.email}</td>
-                      <td className="px-6 py-4 align-top text-sm text-black/80">{customer.phone}</td>
-                      <td className="px-6 py-4 align-top text-sm text-black/60 max-w-xs">
+                      <td className="px-5 py-4 text-xs font-normal text-black/80">{customer.email}</td>
+                      <td className="px-5 py-4 text-xs font-normal text-black/80">{customer.phone}</td>
+                      <td className="px-5 py-4 text-xs font-normal text-black/80 max-w-xs">
                         <span className="line-clamp-2">{customer.notes}</span>
                       </td>
-                      <td className="px-6 py-4 align-top text-sm text-black/80 whitespace-nowrap">
+                      <td className="px-5 py-4 text-xs font-normal text-black/80 whitespace-nowrap">
                         {customer.createdOn}
                       </td>
-                      <td className="px-6 py-4 align-top text-sm font-semibold text-black whitespace-nowrap">
+                      <td className="px-5 py-4 text-xs font-normal text-black/80 whitespace-nowrap">
                         {customer.totalSpending}
                       </td>
-                      <td className="px-6 py-4 align-top">
-                        <div
-                          className="flex items-center justify-center"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingCustomer(customer);
-                            setIsEditCustomerSidebarOpen(true);
-                          }}
-                        >
-                          <EditIcon />
+                      <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center">
+                          {customer.type === "Offline" ? (
+                            <div
+                              className="cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingCustomer(customer);
+                                setIsEditCustomerSidebarOpen(true);
+                              }}
+                            >
+                              <EditIcon />
+                            </div>
+                          ) : (
+                            <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <rect width="38" height="38" rx="4.31818" fill="#F9F9F9"/>
+                              <rect x="0.431818" y="0.431818" width="37.1364" height="37.1364" rx="3.88636" stroke="black" strokeOpacity="0.2" strokeWidth="0.863636"/>
+                              <path d="M21.2721 21.2716L18.0532 24.3531C16.9187 25.4789 16.3514 26.0419 15.6424 26.3272C14.9335 26.6125 14.1541 26.5915 12.5952 26.5495L12.3832 26.5438C11.9086 26.531 11.6713 26.5247 11.5334 26.3634C11.3955 26.2021 11.4143 25.953 11.452 25.455L11.4724 25.1846C11.5784 23.7827 11.6314 23.0818 11.8971 22.4518C12.1628 21.8217 12.6211 21.3102 13.5376 20.287L16.7271 16.7266" stroke="black" strokeWidth="1.13625" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M18.6209 14.9663L20.5705 12.854C21.135 12.2424 21.4172 11.9366 21.7171 11.7583C22.4408 11.3279 23.3319 11.3145 24.0676 11.723C24.3725 11.8922 24.6634 12.1894 25.2453 12.7838C25.8271 13.3782 26.118 13.6753 26.2837 13.9868C26.6836 14.7384 26.6705 15.6487 26.2492 16.3879C26.0746 16.6943 25.7752 16.9826 25.1765 17.5592L23.1659 19.3795" stroke="black" strokeWidth="1.13625" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M19.7571 12.9414L25.0596 18.2439" stroke="black" strokeWidth="1.13625" strokeLinejoin="round"/>
+                              <path d="M10.9998 11L27.0005 27.0007" stroke="black" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -464,6 +521,7 @@ export default function Customers() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Mobile / Tablet List */}
@@ -494,17 +552,31 @@ export default function Customers() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingCustomer(customer);
-                            setIsEditCustomerSidebarOpen(true);
-                          }}
-                        >
-                          <EditIcon 
-                            className="!w-8 !h-8" 
-                          />
-                        </div>
+                        {customer.type === "Offline" ? (
+                          <div
+                            className="cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCustomer(customer);
+                              setIsEditCustomerSidebarOpen(true);
+                            }}
+                          >
+                            <EditIcon 
+                              className="!w-8 !h-8" 
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <rect width="38" height="38" rx="4.31818" fill="#F9F9F9"/>
+                              <rect x="0.431818" y="0.431818" width="37.1364" height="37.1364" rx="3.88636" stroke="black" strokeOpacity="0.2" strokeWidth="0.863636"/>
+                              <path d="M21.2721 21.2716L18.0532 24.3531C16.9187 25.4789 16.3514 26.0419 15.6424 26.3272C14.9335 26.6125 14.1541 26.5915 12.5952 26.5495L12.3832 26.5438C11.9086 26.531 11.6713 26.5247 11.5334 26.3634C11.3955 26.2021 11.4143 25.953 11.452 25.455L11.4724 25.1846C11.5784 23.7827 11.6314 23.0818 11.8971 22.4518C12.1628 21.8217 12.6211 21.3102 13.5376 20.287L16.7271 16.7266" stroke="black" strokeWidth="1.13625" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M18.6209 14.9663L20.5705 12.854C21.135 12.2424 21.4172 11.9366 21.7171 11.7583C22.4408 11.3279 23.3319 11.3145 24.0676 11.723C24.3725 11.8922 24.6634 12.1894 25.2453 12.7838C25.8271 13.3782 26.118 13.6753 26.2837 13.9868C26.6836 14.7384 26.6705 15.6487 26.2492 16.3879C26.0746 16.6943 25.7752 16.9826 25.1765 17.5592L23.1659 19.3795" stroke="black" strokeWidth="1.13625" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M19.7571 12.9414L25.0596 18.2439" stroke="black" strokeWidth="1.13625" strokeLinejoin="round"/>
+                              <path d="M10.9998 11L27.0005 27.0007" stroke="black" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-black/60">

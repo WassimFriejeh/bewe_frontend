@@ -17,7 +17,6 @@ export default function Settings() {
   const [taxRate, setTaxRate] = useState("");
   const [taxLabel, setTaxLabel] = useState("");
   const [teamSearchQuery, setTeamSearchQuery] = useState("");
-  const [teamBranchFilter, setTeamBranchFilter] = useState("All Branches");
   const [teamSortColumn, setTeamSortColumn] = useState<string | null>(null);
   const [teamSortDirection, setTeamSortDirection] = useState<"asc" | "desc">("asc");
   const [isAddUserSidebarOpen, setIsAddUserSidebarOpen] = useState(false);
@@ -64,9 +63,9 @@ export default function Settings() {
   );
 
   return (
-    <div className="flex-1 min-h-screen bg-[#F9F9F9] -ml-6 -mr-6 -mt-6">
+    <div className="flex-1 min-h-screen bg-[#F9F9F9] -ml-6 -mr-6 -mt-6 flex flex-col">
       {/* Top Bar */}
-      <div className="">
+      <div className="flex-shrink-0">
         <div className="main-container flex items-center justify-between bg-white border-b border-gray-200 py-3">
           <h1 className="text-sm font-medium text-black flex items-center">
             <span className="opacity-30">bewe</span>
@@ -89,39 +88,78 @@ export default function Settings() {
       </div>
 
       {/* Main Content */}
-      <div className="main-container py-6">
-        <div className="flex gap-6">
+      <div className="main-container py-6 flex-1 flex">
+        <div className="flex gap-6 items-stretch w-full">
           {/* Settings Navigation */}
-          <div className="w-64 bg-white rounded-lg shadow-sm p-4">
+          <div className="bg-white rounded-lg shadow-sm p-4 h-full" style={{ width: "314px" }}>
             <h2 className="text-lg font-bold text-black mb-4">Settings</h2>
             <div className="space-y-2">
               <button
                 onClick={() => setSelectedSection("Salon Profile")}
-                className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                className={`w-full text-left px-6 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   selectedSection === "Salon Profile"
-                    ? "bg-gray-100 text-black"
-                    : "text-black/60 hover:bg-gray-50"
+                    ? "text-black"
+                    : "text-black/60"
                 }`}
+                style={{
+                  backgroundColor: selectedSection === "Salon Profile" ? "#F5F3F7" : "transparent"
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedSection !== "Salon Profile") {
+                    e.currentTarget.style.backgroundColor = "#F5F3F7";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedSection !== "Salon Profile") {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }
+                }}
               >
                 Salon Profile
               </button>
               <button
                 onClick={() => setSelectedSection("Business Policies")}
-                className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                className={`w-full text-left px-6 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   selectedSection === "Business Policies"
-                    ? "bg-gray-100 text-black"
-                    : "text-black/60 hover:bg-gray-50"
+                    ? "text-black"
+                    : "text-black/60"
                 }`}
+                style={{
+                  backgroundColor: selectedSection === "Business Policies" ? "#F5F3F7" : "transparent"
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedSection !== "Business Policies") {
+                    e.currentTarget.style.backgroundColor = "#F5F3F7";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedSection !== "Business Policies") {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }
+                }}
               >
                 Business Policies
               </button>
               <button
                 onClick={() => setSelectedSection("Team Roles & Access")}
-                className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                className={`w-full text-left px-6 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   selectedSection === "Team Roles & Access"
-                    ? "bg-gray-100 text-black"
-                    : "text-black/60 hover:bg-gray-50"
+                    ? "text-black"
+                    : "text-black/60"
                 }`}
+                style={{
+                  backgroundColor: selectedSection === "Team Roles & Access" ? "#F5F3F7" : "transparent"
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedSection !== "Team Roles & Access") {
+                    e.currentTarget.style.backgroundColor = "#F5F3F7";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedSection !== "Team Roles & Access") {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }
+                }}
               >
                 Team Roles & Access
               </button>
@@ -129,11 +167,11 @@ export default function Settings() {
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 bg-white rounded-lg shadow-sm p-6">
+          <div className={`p-6 flex-1 ${selectedSection === "Business Policies" || selectedSection === "Team Roles & Access" || selectedSection === "Salon Profile" ? "" : "bg-white rounded-lg shadow-sm"}`}>
             {selectedSection === "Salon Profile" && (
               <div className="space-y-6">
                 {/* Top Section with Logo */}
-                <div className="flex items-start justify-between border-b border-gray-200 pb-6">
+                <div className="flex items-start justify-between pb-6">
                   <div className="flex items-start gap-4">
                     <div className="w-24 h-24 rounded-full bg-pink-200 flex items-center justify-center flex-shrink-0">
                       <div className="text-center">
@@ -142,15 +180,13 @@ export default function Settings() {
                       </div>
                     </div>
                     <div>
-                      <div className="text-sm text-black/60 mb-1">ID 173836</div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-bold text-black">Salon Name</h3>
-                        <div className="flex items-center gap-1">
-                          <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                          </svg>
-                          <span className="text-sm font-medium text-black">5.0</span>
-                        </div>
+                      <div className="text-xs text-black/60 mb-1">ID 173836</div>
+                      <h3 className="text-lg font-bold text-black mb-2">Salon Name</h3>
+                      <div className="flex items-center gap-1">
+                        <svg className="w-4 h-4 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                        <span className="text-sm font-medium text-black">5.0</span>
                       </div>
                     </div>
                   </div>
@@ -218,13 +254,13 @@ export default function Settings() {
                 </div>
 
                 {/* Gallery Images */}
-                <div className="border-t border-gray-200 pt-6">
+                <div className="pt-6">
                   <h4 className="text-sm font-semibold text-black mb-4">Gallery Images</h4>
-                  <div className="grid grid-cols-5 gap-4">
+                  <div className="flex gap-3">
                     {Array.from({ length: 5 }, (_, i) => (
                       <div
                         key={i}
-                        className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden"
+                        className="w-40 h-40 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0"
                       >
                         <div className="text-xs text-gray-400">Image {i + 1}</div>
                       </div>
@@ -241,47 +277,43 @@ export default function Settings() {
                   <h3 className="text-lg font-bold text-black mb-2">Payment Rules</h3>
                   <p className="text-sm text-black/60 mb-4">Choose payment methods</p>
                   <div className="space-y-3">
-                    <div className="flex items-center">
+                    <label htmlFor="cash" className="flex items-center w-full px-4 py-3 bg-white border border-black/10 rounded-lg cursor-pointer hover:bg-gray-50">
                       <input
                         type="checkbox"
                         id="cash"
                         checked={paymentMethods.cash}
                         onChange={(e) => setPaymentMethods({ ...paymentMethods, cash: e.target.checked })}
-                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
+                        className="w-4 h-4 accent-[#7B2CBF] border-gray-300 rounded focus:ring-primary cursor-pointer"
                       />
-                      <label htmlFor="cash" className="ml-3 text-sm text-black cursor-pointer">
-                        Cash
-                      </label>
-                    </div>
-                    <div className="flex items-center">
+                      <span className="ml-3 text-sm text-black">Cash</span>
+                    </label>
+                    <label htmlFor="online" className="flex items-center w-full px-4 py-3 bg-white border border-black/10 rounded-lg cursor-pointer hover:bg-gray-50">
                       <input
                         type="checkbox"
                         id="online"
                         checked={paymentMethods.online}
                         onChange={(e) => setPaymentMethods({ ...paymentMethods, online: e.target.checked })}
-                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
+                        className="w-4 h-4 accent-[#7B2CBF] border-gray-300 rounded focus:ring-primary cursor-pointer"
                       />
-                      <label htmlFor="online" className="ml-3 text-sm text-black cursor-pointer">
-                        Online
-                      </label>
-                    </div>
+                      <span className="ml-3 text-sm text-black">Online</span>
+                    </label>
                   </div>
                 </div>
 
                 {/* Tax Settings */}
-                <div className="border-t border-gray-200 pt-6">
+                <div className="pt-6">
                   <h3 className="text-lg font-bold text-black mb-4">Tax Settings</h3>
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setTaxEnabled(!taxEnabled)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
                           taxEnabled ? "bg-primary" : "bg-gray-300"
                         }`}
                       >
                         <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            taxEnabled ? "translate-x-6" : "translate-x-1"
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            taxEnabled ? "translate-x-5" : "translate-x-0.5"
                           }`}
                         />
                       </button>
@@ -291,8 +323,10 @@ export default function Settings() {
                     </div>
                     <div className="grid grid-cols-2 gap-4 pl-0">
                       <div>
-                        <label className="block text-sm font-medium text-black mb-2">
-                          Tax Rate (in %) <span className="text-red-500">*</span>
+                        <label className={`block text-sm font-medium text-black mb-2 ${
+                          !taxEnabled || paymentMethods.online ? "opacity-60" : ""
+                        }`}>
+                          Tax Rate (in %) <span className="text-primary">*</span>
                         </label>
                         <input
                           type="text"
@@ -306,8 +340,10 @@ export default function Settings() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-black mb-2">
-                          Tax Label <span className="text-red-500">*</span>
+                        <label className={`block text-sm font-medium text-black mb-2 ${
+                          !taxEnabled || paymentMethods.online ? "opacity-60" : ""
+                        }`}>
+                          Tax Label <span className="text-primary">*</span>
                         </label>
                         <input
                           type="text"
@@ -325,10 +361,10 @@ export default function Settings() {
                 </div>
 
                 {/* Save Changes Button */}
-                <div className="border-t border-gray-200 pt-6">
+                <div className="pt-6">
                   <Button
                     variant="primary"
-                    className="w-full cursor-pointer"
+                    className="w-auto min-w-[180px] cursor-pointer"
                     onClick={() => {
                       // Handle save changes
                       console.log("Saving business policies...");
@@ -342,133 +378,136 @@ export default function Settings() {
 
             {selectedSection === "Team Roles & Access" && (
               <div className="space-y-6">
-                {/* Title */}
-                <h3 className="text-lg font-bold text-black">Team Roles & Access</h3>
+                {/* Row 1: Title and Add Button */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-black">Team Roles & Access</h3>
+                  <Button 
+                    variant="primary" 
+                    className="flex items-center gap-2 cursor-pointer px-6 py-3"
+                    onClick={() => setIsAddUserSidebarOpen(true)}
+                  >
+                    Add New User
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M16.5 9C16.5 4.85786 13.1421 1.5 9 1.5C4.85786 1.5 1.5 4.85786 1.5 9C1.5 13.1421 4.85786 16.5 9 16.5C13.1421 16.5 16.5 13.1421 16.5 9Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M9 6V12M12 9H6" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </Button>
+                </div>
 
-                {/* Header with Search and Add Button */}
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                {/* Row 2: Search and Branch Dropdown */}
+                <div className="flex items-center justify-between gap-4 -mt-2">
                   <div className="flex-1 max-w-md">
-                    <SearchInput
-                      placeholder="Search by user name"
-                      value={teamSearchQuery}
-                      onChange={(e) => setTeamSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col items-end gap-4">
-                    <Button 
-                      variant="primary" 
-                      className="flex items-center gap-2 cursor-pointer"
-                      onClick={() => setIsAddUserSidebarOpen(true)}
-                    >
-                      Add New User
-                      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M16.5 9C16.5 4.85786 13.1421 1.5 9 1.5C4.85786 1.5 1.5 4.85786 1.5 9C1.5 13.1421 4.85786 16.5 9 16.5C13.1421 16.5 16.5 13.1421 16.5 9Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M9 6V12M12 9H6" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </Button>
                     <div className="relative">
-                      <select
-                        value={teamBranchFilter}
-                        onChange={(e) => setTeamBranchFilter(e.target.value)}
-                        className="px-4 py-2.5 border border-black/10 rounded-lg appearance-none bg-white cursor-pointer focus:outline-none focus:border-primary text-sm pr-8"
-                      >
-                        <option value="All Branches">Branch: All Branches</option>
-                        <option value="Branch 1">Branch: Branch 1</option>
-                        <option value="Branch 2">Branch: Branch 2</option>
-                      </select>
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
+                      <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-[16px] h-[16px]" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12.75 12.75L15.75 15.75" stroke="black" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M14.25 8.25C14.25 4.93629 11.5637 2.25 8.25 2.25C4.93629 2.25 2.25 4.93629 2.25 8.25C2.25 11.5637 4.93629 14.25 8.25 14.25C11.5637 14.25 14.25 11.5637 14.25 8.25Z" stroke="black" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="Search by user name"
+                        value={teamSearchQuery}
+                        onChange={(e) => setTeamSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2.5 border border-black/10 rounded-lg bg-white focus:outline-none focus:border-primary text-sm"
+                      />
                     </div>
                   </div>
+                  <BranchSelector />
                 </div>
 
                 {/* Table */}
-                <div className="border border-black/10 rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th
-                          className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleTeamSort("user")}
-                        >
-                          <div className="flex items-center gap-2">
-                            User
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 2L12 6M4 10L8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </div>
-                        </th>
-                        <th
-                          className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleTeamSort("email")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Email
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 2L12 6M4 10L8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </div>
-                        </th>
-                        <th
-                          className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleTeamSort("role")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Role
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 2L12 6M4 10L8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </div>
-                        </th>
-                        <th
-                          className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleTeamSort("branch")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Branch
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 2L12 6M4 10L8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </div>
-                        </th>
-                        <th
-                          className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100"
-                          onClick={() => handleTeamSort("permissions")}
-                        >
-                          <div className="flex items-center gap-2">
-                            Permission(s)
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 2L12 6M4 10L8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredTeamMembers.map((member) => (
-                        <tr key={member.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-black">
-                            {member.name}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-black">
-                            {member.email}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-black">
-                            {member.role}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-black">
-                            {member.branch}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-black">
-                            {member.permissions.join(", ")}
-                          </td>
+                <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-white border-b border-gray-200">
+                        <tr>
+                          {["User", "Email", "Role", "Branch", "Permission(s)"].map((header) => {
+                            const columnMap: { [key: string]: string } = {
+                              "User": "user",
+                              "Email": "email",
+                              "Role": "role",
+                              "Branch": "branch",
+                              "Permission(s)": "permissions"
+                            };
+                            const columnKey = columnMap[header];
+                            const isSorted = teamSortColumn === columnKey;
+                            return (
+                              <th
+                                key={header}
+                                onClick={() => handleTeamSort(columnKey)}
+                                className="group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer"
+                              >
+                                <div className="flex items-center gap-2">
+                                  {header}
+                                  <svg 
+                                    width="15" 
+                                    height="15" 
+                                    viewBox="0 0 18 18" 
+                                    fill="none" 
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className={`transition-colors ${
+                                      isSorted 
+                                        ? "text-primary opacity-100" 
+                                        : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
+                                    }`}
+                                  >
+                                    <path 
+                                      d="M5.25 3V15" 
+                                      stroke="currentColor" 
+                                      strokeWidth="1.5" 
+                                      strokeLinecap="round" 
+                                      strokeLinejoin="round"
+                                    />
+                                    <path 
+                                      d="M12.75 14.25V3" 
+                                      stroke="currentColor" 
+                                      strokeWidth="1.5" 
+                                      strokeLinecap="round" 
+                                      strokeLinejoin="round"
+                                    />
+                                    <path 
+                                      d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
+                                      stroke="currentColor" 
+                                      strokeWidth="1.5" 
+                                      strokeLinecap="round" 
+                                      strokeLinejoin="round"
+                                    />
+                                    <path 
+                                      d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
+                                      stroke="currentColor" 
+                                      strokeWidth="1.5" 
+                                      strokeLinecap="round" 
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                </div>
+                              </th>
+                            );
+                          })}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredTeamMembers.map((member) => (
+                          <tr key={member.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-5 py-4 text-xs font-normal text-black/80">
+                              {member.name}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-normal text-black/80">
+                              {member.email}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-normal text-black/80 capitalize">
+                              {member.role}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-normal text-black/80">
+                              {member.branch}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-normal text-black/80">
+                              {member.permissions.join(", ")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
