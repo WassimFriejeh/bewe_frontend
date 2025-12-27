@@ -5,10 +5,13 @@ import { useBranch } from "../../contexts/BranchContext";
 import BranchSelector from "../../components/BranchSelector";
 import Button from "../../components/ui/Button";
 import SearchInput from "../../components/ui/SearchInput";
+import Popup from "../../components/Popup";
 
 export default function Settings() {
   const { currentBranch } = useBranch();
   const [selectedSection, setSelectedSection] = useState<"Salon Profile" | "Business Policies" | "Team Roles & Access">("Salon Profile");
+  const [isSaveChangesPopupOpen, setIsSaveChangesPopupOpen] = useState(false);
+  const [saveChangesCallback, setSaveChangesCallback] = useState<(() => void) | null>(null);
   const [paymentMethods, setPaymentMethods] = useState({
     cash: true,
     online: false,
@@ -182,11 +185,11 @@ export default function Settings() {
                     <div>
                       <div className="text-xs text-black/60 mb-1">ID 173836</div>
                       <h3 className="text-lg font-bold text-black mb-2">Salon Name</h3>
-                      <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1">
                         <svg className="w-4 h-4 text-primary" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                        <span className="text-sm font-medium text-black">5.0</span>
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                          <span className="text-sm font-medium text-black">5.0</span>
                       </div>
                     </div>
                   </div>
@@ -286,7 +289,7 @@ export default function Settings() {
                         className="w-4 h-4 accent-[#7B2CBF] border-gray-300 rounded focus:ring-primary cursor-pointer"
                       />
                       <span className="ml-3 text-sm text-black">Cash</span>
-                    </label>
+                      </label>
                     <label htmlFor="online" className="flex items-center w-full px-4 py-3 bg-white border border-black/10 rounded-lg cursor-pointer hover:bg-gray-50">
                       <input
                         type="checkbox"
@@ -296,7 +299,7 @@ export default function Settings() {
                         className="w-4 h-4 accent-[#7B2CBF] border-gray-300 rounded focus:ring-primary cursor-pointer"
                       />
                       <span className="ml-3 text-sm text-black">Online</span>
-                    </label>
+                      </label>
                   </div>
                 </div>
 
@@ -366,8 +369,10 @@ export default function Settings() {
                     variant="primary"
                     className="w-auto min-w-[180px] cursor-pointer"
                     onClick={() => {
-                      // Handle save changes
-                      console.log("Saving business policies...");
+                      setSaveChangesCallback(() => () => {
+                        console.log("Saving business policies...");
+                      });
+                      setIsSaveChangesPopupOpen(true);
                     }}
                   >
                     Save Changes
@@ -380,18 +385,18 @@ export default function Settings() {
               <div className="space-y-6">
                 {/* Row 1: Title and Add Button */}
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-black">Team Roles & Access</h3>
-                  <Button 
-                    variant="primary" 
+                <h3 className="text-lg font-bold text-black">Team Roles & Access</h3>
+                    <Button 
+                      variant="primary" 
                     className="flex items-center gap-2 cursor-pointer px-6 py-3"
-                    onClick={() => setIsAddUserSidebarOpen(true)}
-                  >
-                    Add New User
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M16.5 9C16.5 4.85786 13.1421 1.5 9 1.5C4.85786 1.5 1.5 4.85786 1.5 9C1.5 13.1421 4.85786 16.5 9 16.5C13.1421 16.5 16.5 13.1421 16.5 9Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M9 6V12M12 9H6" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </Button>
+                      onClick={() => setIsAddUserSidebarOpen(true)}
+                    >
+                      Add New User
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16.5 9C16.5 4.85786 13.1421 1.5 9 1.5C4.85786 1.5 1.5 4.85786 1.5 9C1.5 13.1421 4.85786 16.5 9 16.5C13.1421 16.5 16.5 13.1421 16.5 9Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M9 6V12M12 9H6" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </Button>
                 </div>
 
                 {/* Row 2: Search and Branch Dropdown */}
@@ -401,7 +406,7 @@ export default function Settings() {
                       <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-[16px] h-[16px]" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12.75 12.75L15.75 15.75" stroke="black" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
                         <path d="M14.25 8.25C14.25 4.93629 11.5637 2.25 8.25 2.25C4.93629 2.25 2.25 4.93629 2.25 8.25C2.25 11.5637 4.93629 14.25 8.25 14.25C11.5637 14.25 14.25 11.5637 14.25 8.25Z" stroke="black" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
+                        </svg>
                       <input
                         type="text"
                         placeholder="Search by user name"
@@ -417,9 +422,9 @@ export default function Settings() {
                 {/* Table */}
                 <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <table className="w-full">
                       <thead className="bg-white border-b border-gray-200">
-                        <tr>
+                      <tr>
                           {["User", "Email", "Role", "Branch", "Permission(s)"].map((header) => {
                             const columnMap: { [key: string]: string } = {
                               "User": "user",
@@ -435,8 +440,8 @@ export default function Settings() {
                                 key={header}
                                 onClick={() => handleTeamSort(columnKey)}
                                 className="group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer"
-                              >
-                                <div className="flex items-center gap-2">
+                        >
+                          <div className="flex items-center gap-2">
                                   {header}
                                   <svg 
                                     width="15" 
@@ -478,35 +483,35 @@ export default function Settings() {
                                       strokeLinecap="round" 
                                       strokeLinejoin="round"
                                     />
-                                  </svg>
-                                </div>
-                              </th>
+                            </svg>
+                          </div>
+                        </th>
                             );
                           })}
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredTeamMembers.map((member) => (
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredTeamMembers.map((member) => (
                           <tr key={member.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-5 py-4 text-xs font-normal text-black/80">
-                              {member.name}
-                            </td>
+                            {member.name}
+                          </td>
                             <td className="px-5 py-4 text-xs font-normal text-black/80">
-                              {member.email}
-                            </td>
+                            {member.email}
+                          </td>
                             <td className="px-5 py-4 text-xs font-normal text-black/80 capitalize">
-                              {member.role}
-                            </td>
+                            {member.role}
+                          </td>
                             <td className="px-5 py-4 text-xs font-normal text-black/80">
-                              {member.branch}
-                            </td>
+                            {member.branch}
+                          </td>
                             <td className="px-5 py-4 text-xs font-normal text-black/80">
-                              {member.permissions.join(", ")}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            {member.permissions.join(", ")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                   </div>
                 </div>
               </div>
@@ -683,6 +688,45 @@ export default function Settings() {
       </div>
         </div>
       )}
+
+      {/* Save Changes Confirmation Popup */}
+      <Popup
+        isOpen={isSaveChangesPopupOpen}
+        onClose={() => {
+          setIsSaveChangesPopupOpen(false);
+          setSaveChangesCallback(null);
+        }}
+        title="Save Changes"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Are you sure you want to save these changes?
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-4">
+            <Button
+              variant="transparent"
+              onClick={() => {
+                setIsSaveChangesPopupOpen(false);
+                setSaveChangesCallback(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (saveChangesCallback) {
+                  saveChangesCallback();
+                }
+                setIsSaveChangesPopupOpen(false);
+                setSaveChangesCallback(null);
+              }}
+            >
+              Save Changes
+            </Button>
+          </div>
+        </div>
+      </Popup>
     </div>
   );
 }

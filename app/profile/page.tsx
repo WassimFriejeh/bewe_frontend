@@ -7,6 +7,7 @@ import BranchSelector from "../../components/BranchSelector";
 import Button from "../../components/ui/Button";
 import EyeIcon from "../../components/Icons/EyeIcon";
 import EyeSlashIcon from "../../components/Icons/EyeSlashIcon";
+import Popup from "../../components/Popup";
 import intlTelInput from "intl-tel-input";
 import "intl-tel-input/build/css/intlTelInput.css";
 
@@ -14,6 +15,8 @@ export default function ProfilePage() {
   const { currentBranch } = useBranch();
   const [user, setUser] = useState<any>(null);
   const [selectedSection, setSelectedSection] = useState<"Personal Information" | "Change Password">("Personal Information");
+  const [isSaveChangesPopupOpen, setIsSaveChangesPopupOpen] = useState(false);
+  const [saveChangesCallback, setSaveChangesCallback] = useState<(() => void) | null>(null);
   const [formData, setFormData] = useState({
     firstName: "Joe",
     lastName: "Doe",
@@ -272,8 +275,10 @@ export default function ProfilePage() {
                       variant="primary"
                       className="w-auto min-w-[150px] cursor-pointer"
                       onClick={() => {
-                        // Handle save changes
-                        console.log("Saving personal information:", formData);
+                        setSaveChangesCallback(() => () => {
+                          console.log("Saving personal information:", formData);
+                        });
+                        setIsSaveChangesPopupOpen(true);
                       }}
                     >
                       Save Changes
@@ -287,19 +292,19 @@ export default function ProfilePage() {
                   <h2 className="text-lg font-bold text-black mb-6">Change Password</h2>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Old Password */}
-                    <div>
-                      <label className="block text-sm font-medium text-black mb-2">
+                  {/* Old Password */}
+                  <div>
+                    <label className="block text-sm font-medium text-black mb-2">
                         Old Password <span className="text-primary">*</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={passwordData.oldPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, oldPassword: e.target.value })}
-                        placeholder="Old Password"
-                        className="w-full px-4 py-2.5 border border-black/10 rounded-lg bg-white focus:outline-none focus:border-primary text-sm"
-                      />
-                    </div>
+                    </label>
+                    <input
+                      type="password"
+                      value={passwordData.oldPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, oldPassword: e.target.value })}
+                      placeholder="Old Password"
+                      className="w-full px-4 py-2.5 border border-black/10 rounded-lg bg-white focus:outline-none focus:border-primary text-sm"
+                    />
+                  </div>
 
                     {/* Empty div to maintain grid layout */}
                     <div></div>
@@ -365,8 +370,10 @@ export default function ProfilePage() {
                       variant="primary"
                       className="cursor-pointer"
                       onClick={() => {
-                        // Handle change password
-                        console.log("Changing password...", passwordData);
+                        setSaveChangesCallback(() => () => {
+                          console.log("Changing password...", passwordData);
+                        });
+                        setIsSaveChangesPopupOpen(true);
                       }}
                     >
                       Change Password
@@ -378,6 +385,45 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Save Changes Confirmation Popup */}
+      <Popup
+        isOpen={isSaveChangesPopupOpen}
+        onClose={() => {
+          setIsSaveChangesPopupOpen(false);
+          setSaveChangesCallback(null);
+        }}
+        title="Save Changes"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Are you sure you want to save these changes?
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-4">
+            <Button
+              variant="transparent"
+              onClick={() => {
+                setIsSaveChangesPopupOpen(false);
+                setSaveChangesCallback(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (saveChangesCallback) {
+                  saveChangesCallback();
+                }
+                setIsSaveChangesPopupOpen(false);
+                setSaveChangesCallback(null);
+              }}
+            >
+              Save Changes
+            </Button>
+          </div>
+        </div>
+      </Popup>
     </div>
   );
 }

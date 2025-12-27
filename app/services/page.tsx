@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useBranch } from "../../contexts/BranchContext";
 import axiosClient from "../../libs/axiosClient";
 import BranchSelector from "../../components/BranchSelector";
@@ -36,8 +36,38 @@ export default function Services() {
   const [serviceToDelete, setServiceToDelete] = useState<Service | null>(null);
   const itemsPerPage = 12;
 
+  // Mock data for testing
+  const mockServices: Service[] = [
+    { id: "1", title: "Classic Haircut", category: "Hair", subCategory: "Cut", duration: "30 min", price: "$25.00" },
+    { id: "2", title: "Premium Haircut", category: "Hair", subCategory: "Cut", duration: "45 min", price: "$40.00" },
+    { id: "3", title: "Hair Wash", category: "Hair", subCategory: "Wash", duration: "20 min", price: "$15.00" },
+    { id: "4", title: "Hair Coloring", category: "Hair", subCategory: "Color", duration: "2h", price: "$120.00" },
+    { id: "5", title: "Hair Highlighting", category: "Hair", subCategory: "Color", duration: "2h 30 min", price: "$150.00" },
+    { id: "6", title: "Full Body Massage", category: "Body", subCategory: "Massage", duration: "1h", price: "$80.00" },
+    { id: "7", title: "Back Massage", category: "Body", subCategory: "Massage", duration: "30 min", price: "$45.00" },
+    { id: "8", title: "Facial Treatment", category: "Face", subCategory: "Facial", duration: "1h", price: "$75.00" },
+    { id: "9", title: "Deep Cleansing Facial", category: "Face", subCategory: "Facial", duration: "1h 30 min", price: "$95.00" },
+    { id: "10", title: "Manicure", category: "Nails", subCategory: "Hands", duration: "45 min", price: "$35.00" },
+    { id: "11", title: "Pedicure", category: "Nails", subCategory: "Feet", duration: "1h", price: "$40.00" },
+    { id: "12", title: "Hair Styling", category: "Hair", subCategory: "Style", duration: "1h", price: "$50.00" },
+    { id: "13", title: "Beard Trim", category: "Hair", subCategory: "Beard", duration: "20 min", price: "$20.00" },
+    { id: "14", title: "Waxing - Legs", category: "Body", subCategory: "Waxing", duration: "45 min", price: "$55.00" },
+    { id: "15", title: "Waxing - Bikini", category: "Body", subCategory: "Waxing", duration: "30 min", price: "$40.00" },
+    { id: "16", title: "Eyebrow Threading", category: "Face", subCategory: "Threading", duration: "15 min", price: "$15.00" },
+    { id: "17", title: "Hair Treatment", category: "Hair", subCategory: "Treatment", duration: "1h", price: "$60.00" },
+    { id: "18", title: "Acrylic Nails", category: "Nails", subCategory: "Hands", duration: "1h 30 min", price: "$50.00" },
+    { id: "19", title: "Gel Manicure", category: "Nails", subCategory: "Hands", duration: "1h", price: "$45.00" },
+    { id: "20", title: "Full Body Scrub", category: "Body", subCategory: "Scrub", duration: "1h", price: "$70.00" },
+    { id: "21", title: "Hot Stone Massage", category: "Body", subCategory: "Massage", duration: "1h 30 min", price: "$100.00" },
+    { id: "22", title: "Scalp Treatment", category: "Hair", subCategory: "Treatment", duration: "45 min", price: "$55.00" },
+  ];
+
   const fetchServicesData = useCallback(async () => {
-    if (!currentBranch) return;
+    if (!currentBranch) {
+      // Use mock data when no branch is selected
+      setServices(mockServices);
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -82,10 +112,11 @@ export default function Services() {
         });
       });
 
-      setServices(transformedServices);
+      // Use mock data for testing (uncomment to use API data: setServices(transformedServices.length > 0 ? transformedServices : mockServices))
+      setServices(mockServices);
     } catch (error) {
       console.error("Error fetching services data:", error);
-      setServices([]);
+      setServices(mockServices);
     } finally {
       setIsLoading(false);
     }
@@ -262,35 +293,19 @@ export default function Services() {
         <div className="hidden md:flex items-start justify-between gap-4 mb-4">
           <div className="flex items-center gap-4 flex-1">
             {/* Category Filter */}
-            <div className="relative">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-4 py-3 pr-8 border border-black/10 rounded-[5px] focus:outline-none focus:ring-1 focus:ring-primary text-xs appearance-none bg-white cursor-pointer"
-              >
-                <option value="All">Category: All</option>
-                {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-              <svg
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
+            <CategoryDropdown 
+              categories={categories}
+              selectedCategory={selectedCategory}
+              onSelect={setSelectedCategory}
+            />
             
             {/* Search Input */}
-            <div className="flex-1 max-w-md">
+            <div className="w-[45%]">
               <SearchInput
                 placeholder="Search by service title"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-white"
               />
             </div>
           </div>
@@ -356,6 +371,7 @@ export default function Services() {
               placeholder="Search by service title"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-white"
             />
           </div>
         </div>
@@ -378,49 +394,49 @@ export default function Services() {
                       >
                         <div className="flex items-center gap-2">
                           {header}
-                          {header !== "Action" && (
-                            <svg 
-                              width="15" 
-                              height="15" 
-                              viewBox="0 0 18 18" 
-                              fill="none" 
-                              xmlns="http://www.w3.org/2000/svg"
-                              className={`transition-colors ${
-                                isSorted 
+                          <svg 
+                            width="15" 
+                            height="15" 
+                            viewBox="0 0 18 18" 
+                            fill="none" 
+                            xmlns="http://www.w3.org/2000/svg"
+                            className={`transition-colors ${
+                              header === "Action" 
+                                ? "text-gray-400 opacity-50" 
+                                : isSorted 
                                   ? "text-primary opacity-100" 
                                   : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
-                              }`}
-                            >
-                              <path 
-                                d="M5.25 3V15" 
-                                stroke="currentColor" 
-                                strokeWidth="1.5" 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round"
-                              />
-                              <path 
-                                d="M12.75 14.25V3" 
-                                stroke="currentColor" 
-                                strokeWidth="1.5" 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round"
-                              />
-                              <path 
-                                d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
-                                stroke="currentColor" 
-                                strokeWidth="1.5" 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round"
-                              />
-                              <path 
-                                d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
-                                stroke="currentColor" 
-                                strokeWidth="1.5" 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          )}
+                            }`}
+                          >
+                            <path 
+                              d="M5.25 3V15" 
+                              stroke="currentColor" 
+                              strokeWidth="1.5" 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round"
+                            />
+                            <path 
+                              d="M12.75 14.25V3" 
+                              stroke="currentColor" 
+                              strokeWidth="1.5" 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round"
+                            />
+                            <path 
+                              d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
+                              stroke="currentColor" 
+                              strokeWidth="1.5" 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round"
+                            />
+                            <path 
+                              d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
+                              stroke="currentColor" 
+                              strokeWidth="1.5" 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round"
+                            />
+                          </svg>
                         </div>
                       </th>
                     );
@@ -467,7 +483,7 @@ export default function Services() {
           {/* Pagination - Desktop */}
           {filteredServices.length > 0 && (
             <div className="hidden md:flex px-4 py-3 bg-gray-50 border-t border-gray-200 items-center justify-between">
-              <div className="text-sm text-gray-700">
+              <div className="text-sm text-gray-700" style={{ width: "160px", height: "17px", opacity: "0.4" }}>
                 Showing {paginatedServices.length} out of {filteredServices.length}
               </div>
               <div className="flex items-center gap-2">
@@ -475,9 +491,9 @@ export default function Services() {
                   <button
                     key={page}
                     onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1 text-sm rounded ${
+                    className={`w-8 h-8 flex items-center justify-center text-sm rounded ${
                       currentPage === page
-                        ? "bg-primary text-white"
+                        ? "bg-black text-white"
                         : "bg-white text-gray-700 hover:bg-gray-100"
                     }`}
                   >
@@ -529,7 +545,7 @@ export default function Services() {
           {/* Pagination - Mobile/Tablet */}
           {filteredServices.length > 0 && (
             <div className="block md:hidden px-4 py-3 bg-gray-50 border-t border-gray-200">
-              <div className="text-xs text-gray-700 mb-3 text-center">
+              <div className="text-xs text-gray-700 mb-3 text-center" style={{ width: "160px", height: "17px", opacity: "0.4", margin: "0 auto" }}>
                 Showing {paginatedServices.length} out of {filteredServices.length}
               </div>
               <div className="flex items-center justify-center gap-2 overflow-x-auto">
@@ -537,9 +553,9 @@ export default function Services() {
                   <button
                     key={page}
                     onClick={() => setCurrentPage(page)}
-                    className={`px-2.5 py-1 text-xs rounded whitespace-nowrap ${
+                    className={`w-8 h-8 flex items-center justify-center text-xs rounded whitespace-nowrap ${
                       currentPage === page
-                        ? "bg-primary text-white"
+                        ? "bg-black text-white"
                         : "bg-white text-gray-700 hover:bg-gray-100"
                     }`}
                   >
@@ -609,6 +625,83 @@ export default function Services() {
   );
 }
 
+// Category Dropdown Component
+function CategoryDropdown({
+  categories,
+  selectedCategory,
+  onSelect,
+}: {
+  categories: string[];
+  selectedCategory: string;
+  onSelect: (category: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleCategoryChange = (category: string) => {
+    onSelect(category);
+    setIsOpen(false);
+  };
+
+  const displayText = selectedCategory === "All" ? "Category: All" : selectedCategory;
+
+  return (
+    <div className="relative w-[200px]" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-5 py-2.5 cursor-pointer text-xs font-medium border border-black/20 rounded-[10px] transition-colors focus:outline-none whitespace-nowrap w-full bg-white"
+      >
+        <span className="flex-1 text-left whitespace-nowrap truncate min-w-0">{displayText}</span>
+        <svg
+          className={`w-4 h-4 transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 mt-2 w-full bg-white border border-black/20 rounded-[10px] shadow-lg z-50 max-h-60 overflow-auto">
+          <div>
+            <button
+              onClick={() => handleCategoryChange("All")}
+              className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-black hover:text-white transition-colors rounded-[10px] ${
+                selectedCategory === "All" ? "bg-black/10 text-black" : "text-gray-700"
+              }`}
+            >
+              Category: All
+            </button>
+            {categories.map((category) => (
+              <button
+                key={category}
+                onClick={() => handleCategoryChange(category)}
+                className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-black hover:text-white transition-colors rounded-[10px] ${
+                  selectedCategory === category ? "bg-black/10 text-black" : "text-gray-700"
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Add New Service Sidebar Component
 function AddNewServiceSidebar({
   onClose,
@@ -646,6 +739,7 @@ function AddNewServiceSidebar({
     price: "",
     duration: "",
     requiresDeposit: false,
+    depositAmount: "",
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -676,6 +770,7 @@ function AddNewServiceSidebar({
         price: "",
         duration: "",
         requiresDeposit: false,
+        depositAmount: "",
       });
       onClose();
     }, 300);
@@ -723,6 +818,7 @@ function AddNewServiceSidebar({
         price_type: pricingDetails.priceType, // "fixed" or "starting"
         duration: durationMinutes,
         requires_deposit: pricingDetails.requiresDeposit,
+        deposit_amount: pricingDetails.requiresDeposit && pricingDetails.depositAmount ? parseFloat(pricingDetails.depositAmount) : 0,
         staff_ids: selectedStaffIds.map(id => Number(id)),
         branch_id: currentBranch.id,
       };
@@ -743,6 +839,7 @@ function AddNewServiceSidebar({
         price: "",
         duration: "",
         requiresDeposit: false,
+        depositAmount: "",
       });
       
       // Close modal and refresh services list
@@ -844,7 +941,7 @@ function AddNewServiceSidebar({
         }`}
         onClick={handleClose}
       />
-      <div className={`flex flex-col relative w-full md:w-[32%] bg-[#F9F9F9] h-full shadow-xl overflow-y-auto transform transition-all duration-300 ease-in-out ${
+      <div className={`flex flex-col relative w-full md:w-[573px] bg-[#F9F9F9] h-full shadow-xl transform transition-all duration-300 ease-in-out ${
         isAnimating && !isClosing ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
       }`}>
         {/* Header */}
@@ -897,7 +994,7 @@ function AddNewServiceSidebar({
         </div>
 
         {/* Step Content */}
-        <div className="p-4 md:p-6 pt-3">
+        <div className="p-4 md:p-6 pt-3 flex-1 overflow-y-auto">
           {/* Step 1: Service Details */}
           {currentStep === 1 && (
             <div>
@@ -1002,8 +1099,8 @@ function AddNewServiceSidebar({
 
           {/* Step 2: Staff Selection */}
           {currentStep === 2 && (
-            <div>
-              <h3 className="text-sm md:text-base font-bold text-black mb-4 md:mb-6">Choose who is providing this service</h3>
+            <div className="flex flex-col flex-1 min-h-0">
+              <h3 className="text-sm md:text-base font-bold text-black mb-4 md:mb-6 flex-shrink-0">Choose who is providing this service</h3>
               
               {isLoadingStaff ? (
                 <div className="py-8 text-center text-gray-500 text-sm">
@@ -1014,25 +1111,26 @@ function AddNewServiceSidebar({
                   No staff members found
                 </div>
               ) : (
-                <div className="space-y-3 pb-8 md:pb-10 max-h-[300px] md:max-h-[400px] overflow-y-auto">
+                <div className="space-y-2 flex-1 overflow-y-auto min-h-0">
                   {staffMembers.map((staff) => {
                     const isSelected = selectedStaffIds.includes(staff.id);
                     return (
                       <div
                         key={staff.id}
                         onClick={() => toggleStaffSelection(staff.id)}
-                        className="flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-white border border-black/10 rounded-[10px] cursor-pointer hover:border-primary transition-colors"
+                        className="flex items-center justify-between w-[513px] h-[72px] bg-white border border-black/10 rounded-lg cursor-pointer hover:border-primary transition-colors"
+                        style={{ padding: "13px 20px 13px 13px" }}
                       >
                         {/* Avatar */}
                         {staff.avatar ? (
                           <img
                             src={staff.avatar}
                             alt={staff.name}
-                            className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover flex-shrink-0"
+                            className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0"
                           />
                         ) : (
                           <div
-                            className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xs md:text-sm font-normal text-white flex-shrink-0"
+                            className="w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs font-normal text-white flex-shrink-0"
                             style={{ backgroundColor: staff.calendarColor || "#9CA3AF" }}
                           >
                             {staff.name.charAt(0)}
@@ -1040,18 +1138,18 @@ function AddNewServiceSidebar({
                         )}
                         
                         {/* Name */}
-                        <div className="flex-1 min-w-0">
-                          <span className="text-xs md:text-sm font-normal text-black/80 truncate">{staff.name}</span>
+                        <div className="flex-1 min-w-0 ml-3">
+                          <span className="text-xs font-normal text-black/80 truncate">{staff.name}</span>
                         </div>
                         
                         {/* Checkbox */}
-                        <div className={`w-4 h-4 md:w-5 md:h-5 border-[1.5px] flex items-center justify-center transition-colors flex-shrink-0 ${
+                        <div className={`w-4 h-4 border-[1.5px] flex items-center justify-center transition-colors flex-shrink-0 ${
                           isSelected 
                             ? "bg-primary border-primary" 
                             : "border-black/10"
                         }`}>
                           {isSelected && (
-                            <svg className="w-3 h-3 md:w-4 md:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                             </svg>
                           )}
@@ -1170,25 +1268,46 @@ function AddNewServiceSidebar({
                     </span>
                   </div>
                 </div>
+
+                {/* Deposit Amount - Only shown when Requires Deposit is enabled */}
+                {pricingDetails.requiresDeposit && (
+                  <div>
+                    <label className="main-label black">
+                      Deposit Amount (in USD) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Deposit Amount (in USD)"
+                      value={pricingDetails.depositAmount}
+                      onChange={(e) => setPricingDetails({ ...pricingDetails, depositAmount: e.target.value })}
+                      className="main-input"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-between gap-3 md:gap-4 pt-4 md:pt-6 border-t border-gray-200 sticky bottom-0 bg-[#F9F9F9] pb-4 md:pb-0">
+        </div>
+
+        {/* Footer with Action Buttons */}
+        <div className="border-t border-gray-200 bg-[#F9F9F9] p-4 md:p-6 flex-shrink-0">
+          <div className="flex items-center gap-3 md:gap-4">
             {currentStep === 1 ? (
               <>
                 <Button
                   variant="transparent"
                   onClick={handleClose}
-                  className="flex-1 text-xs md:text-sm"
+                  className="flex-[1] text-xs md:text-sm"
                 >
                   Cancel
                 </Button>
                 <Button
                   variant="primary"
                   onClick={handleContinue}
-                  className="flex-1 text-xs md:text-sm"
+                  className="flex-[3] text-xs md:text-sm"
                 >
                   Continue
                 </Button>
@@ -1198,14 +1317,14 @@ function AddNewServiceSidebar({
                 <Button
                   variant="transparent"
                   onClick={handlePrevious}
-                  className="flex-1 text-xs md:text-sm"
+                  className="flex-[1] text-xs md:text-sm"
                 >
                   Previous
                 </Button>
                 <Button
                   variant="primary"
                   onClick={handleContinue}
-                  className="flex-1 text-xs md:text-sm"
+                  className="flex-[3] text-xs md:text-sm"
                   disabled={isSaving}
                 >
                   {isSaving ? "Saving..." : currentStep === steps.length ? "Add Service" : "Continue"}
@@ -1318,6 +1437,7 @@ function EditServiceSidebar({
         price_type: pricingDetails.priceType,
         duration: durationMinutes,
         requires_deposit: pricingDetails.requiresDeposit,
+        deposit_amount: pricingDetails.requiresDeposit && pricingDetails.depositAmount ? parseFloat(pricingDetails.depositAmount) : 0,
         staff_ids: selectedStaffIds.map(id => Number(id)),
         branch_id: currentBranch.id,
       };
@@ -1741,6 +1861,24 @@ function EditServiceSidebar({
                     </span>
                   </div>
                 </div>
+
+                {/* Deposit Amount - Only shown when Requires Deposit is enabled */}
+                {pricingDetails.requiresDeposit && (
+                  <div>
+                    <label className="main-label black">
+                      Deposit Amount (in USD) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Deposit Amount (in USD)"
+                      value={pricingDetails.depositAmount}
+                      onChange={(e) => setPricingDetails({ ...pricingDetails, depositAmount: e.target.value })}
+                      className="main-input"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

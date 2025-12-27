@@ -332,82 +332,82 @@ export default function Customers() {
                 />
               </div>
               <div className="relative flex-shrink-0">
-                <select
-                  value={clientTypeFilter}
-                  onChange={(e) => {
-                    setClientTypeFilter(e.target.value as any);
-                    setCurrentPage(1);
-                  }}
+                  <select
+                    value={clientTypeFilter}
+                    onChange={(e) => {
+                      setClientTypeFilter(e.target.value as any);
+                      setCurrentPage(1);
+                    }}
                   className="appearance-none pl-3 pr-8 py-2.5 text-xs md:text-sm border border-black/20 rounded-[10px] bg-white text-black cursor-pointer focus:outline-none transition-colors hover:bg-black hover:text-white"
                   style={{ width: "200px" }}
-                >
-                  <option value="All">Client Type: Select</option>
-                  <option value="Offline">Client Type: Offline</option>
-                  <option value="bewe App">Client Type: bewe App</option>
-                </select>
-                <svg
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40 pointer-events-none"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </div>
+                  >
+                    <option value="All">Client Type: Select</option>
+                    <option value="Offline">Client Type: Offline</option>
+                    <option value="bewe App">Client Type: bewe App</option>
+                  </select>
+                  <svg
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40 pointer-events-none"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </div>
             </div>
           </div>
 
           {/* Table - Desktop */}
           <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden border border-black/10 mx-4">
             <div className="overflow-x-auto">
-              <table className="w-full">
+            <table className="w-full">
                 <thead className="bg-white border-b border-gray-200">
-                  <tr>
-                    {([
-                      "customer",
-                      "type",
-                      "email",
-                      "phone",
-                      "notes",
-                      "createdOn",
-                      "totalSpending",
+                <tr>
+                  {([
+                    "customer",
+                    "type",
+                    "email",
+                    "phone",
+                    "notes",
+                    "createdOn",
+                    "totalSpending",
                     ] as const).map((column) => {
                       const isSorted = sortColumn === (column === "customer" ? "name" : column);
                       return (
-                        <th
-                          key={column}
+                    <th
+                      key={column}
                           className={`group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer ${
                             column === "totalSpending" ? "" : ""
                           }`}
-                          onClick={() => handleSort(column === "customer" ? "name" : column)}
-                        >
-                          <div className="flex items-center gap-2">
-                            {column === "customer" && "Customer"}
-                            {column === "type" && "Type"}
-                            {column === "email" && "Email Address"}
-                            {column === "phone" && "Phone Number"}
-                            {column === "notes" && "Notes"}
-                            {column === "createdOn" && "Created on"}
-                            {column === "totalSpending" && "Total Spending"}
-                            <svg 
+                      onClick={() => handleSort(column === "customer" ? "name" : column)}
+                    >
+                      <div className="flex items-center gap-2">
+                        {column === "customer" && "Customer"}
+                        {column === "type" && "Type"}
+                        {column === "email" && "Email Address"}
+                        {column === "phone" && "Phone Number"}
+                        {column === "notes" && "Notes"}
+                        {column === "createdOn" && "Created on"}
+                        {column === "totalSpending" && "Total Spending"}
+                        <svg
                               width="15" 
                               height="15" 
                               viewBox="0 0 18 18" 
-                              fill="none" 
-                              xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
                               className={`transition-colors ${
                                 isSorted 
                                   ? "text-primary opacity-100" 
                                   : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
                               }`}
-                            >
-                              <path 
+                        >
+                          <path
                                 d="M5.25 3V15" 
                                 stroke="currentColor" 
                                 strokeWidth="1.5" 
@@ -430,19 +430,19 @@ export default function Customers() {
                               />
                               <path 
                                 d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
-                                stroke="currentColor" 
-                                strokeWidth="1.5" 
-                                strokeLinecap="round" 
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </div>
-                        </th>
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                    </th>
                       );
                     })}
                     <th className="px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize">Action</th>
-                  </tr>
-                </thead>
+                </tr>
+              </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
         {isLoading ? (
                   <tr>
@@ -470,7 +470,7 @@ export default function Customers() {
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center text-xs font-normal text-black">
                             {customer.initial}
-                          </div>
+              </div>
                           <div>
                             <div className="text-xs font-normal text-black/80">{customer.name}</div>
                             <div className="text-xs text-black/40">ID #{customer.id}</div>
@@ -478,7 +478,7 @@ export default function Customers() {
                         </div>
                       </td>
                       <td className="px-5 py-4 text-xs font-normal text-black/80 capitalize">
-                        {customer.type}
+                          {customer.type}
                       </td>
                       <td className="px-5 py-4 text-xs font-normal text-black/80">{customer.email}</td>
                       <td className="px-5 py-4 text-xs font-normal text-black/80">{customer.phone}</td>
@@ -494,15 +494,15 @@ export default function Customers() {
                       <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center">
                           {customer.type === "Offline" ? (
-                            <div
+                        <div
                               className="cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingCustomer(customer);
-                                setIsEditCustomerSidebarOpen(true);
-                              }}
-                            >
-                              <EditIcon />
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingCustomer(customer);
+                            setIsEditCustomerSidebarOpen(true);
+                          }}
+                        >
+                          <EditIcon />
                             </div>
                           ) : (
                             <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -553,18 +553,18 @@ export default function Customers() {
                       </div>
                       <div className="flex items-center gap-2">
                         {customer.type === "Offline" ? (
-                          <div
+                        <div
                             className="cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingCustomer(customer);
-                              setIsEditCustomerSidebarOpen(true);
-                            }}
-                          >
-                            <EditIcon 
-                              className="!w-8 !h-8" 
-                            />
-                          </div>
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingCustomer(customer);
+                            setIsEditCustomerSidebarOpen(true);
+                          }}
+                        >
+                          <EditIcon 
+                            className="!w-8 !h-8" 
+                          />
+                        </div>
                         ) : (
                           <div>
                             <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">

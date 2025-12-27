@@ -38,9 +38,15 @@ export default function Marketing() {
   const [promotionToResume, setPromotionToResume] = useState<Promotion | null>(null);
   const [isPausePopupOpen, setIsPausePopupOpen] = useState(false);
   const [promotionToPause, setPromotionToPause] = useState<Promotion | null>(null);
+  const [isCancelPromotionPopupOpen, setIsCancelPromotionPopupOpen] = useState(false);
+  const [promotionToCancel, setPromotionToCancel] = useState<Promotion | null>(null);
   const [isEditSidebarOpen, setIsEditSidebarOpen] = useState(false);
   const [promotionToEdit, setPromotionToEdit] = useState<Promotion | null>(null);
   const [isCreatePromotionSidebarOpen, setIsCreatePromotionSidebarOpen] = useState(false);
+  const [isDeletePopupOpen, setIsDeletePopupOpen] = useState(false);
+  const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(null);
+  const [isSaveChangesPopupOpen, setIsSaveChangesPopupOpen] = useState(false);
+  const [saveChangesCallback, setSaveChangesCallback] = useState<(() => void) | null>(null);
   const [notificationSettings, setNotificationSettings] = useState({
     "24-hours-reminder": true,
     "1-hour-reminder": true,
@@ -62,6 +68,8 @@ export default function Marketing() {
     fromDate: "",
     toDate: "",
   });
+  const [sendMessageFromDate, setSendMessageFromDate] = useState("");
+  const [sendMessageToDate, setSendMessageToDate] = useState("");
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [customerSortColumn, setCustomerSortColumn] = useState<string | null>(null);
   const [customerSortDirection, setCustomerSortDirection] = useState<"asc" | "desc">("asc");
@@ -172,8 +180,6 @@ export default function Marketing() {
   ];
 
   const fetchPromotionsData = useCallback(async () => {
-    if (!currentBranch) return;
-
     setIsLoading(true);
     try {
       // TODO: Replace with actual API endpoint
@@ -181,11 +187,12 @@ export default function Marketing() {
       //   params: { branch_id: currentBranch.id },
       // });
       
-      // Placeholder data for now
+      // Static data for promotions
       const mockPromotions: Promotion[] = [
+        // Active promotions
         {
           id: "1",
-          title: "Promotion Title",
+          title: "Summer Sale",
           type: "Buy One, Get One",
           startDate: "Fri 29 Aug, 2025 | 02:30 pm",
           endDate: "Fri 5 Sep, 2025 | 02:30 pm",
@@ -194,7 +201,7 @@ export default function Marketing() {
         },
         {
           id: "2",
-          title: "Promotion Title",
+          title: "Holiday Special",
           type: "Minimum Spend Discount",
           startDate: "Fri 29 Aug, 2025 | 02:30 pm",
           endDate: "Fri 5 Sep, 2025 | 02:30 pm",
@@ -203,7 +210,7 @@ export default function Marketing() {
         },
         {
           id: "3",
-          title: "Promotion Title",
+          title: "Weekend Discount",
           type: "Percentage",
           startDate: "Fri 29 Aug, 2025 | 02:30 pm",
           endDate: "Fri 5 Sep, 2025 | 02:30 pm",
@@ -212,7 +219,7 @@ export default function Marketing() {
         },
         {
           id: "4",
-          title: "Promotion Title",
+          title: "Flash Deal",
           type: "Flash Deals",
           startDate: "Fri 29 Aug, 2025 | 02:30 pm",
           endDate: "Fri 3 Oct, 2025 | 02:30 pm",
@@ -221,7 +228,7 @@ export default function Marketing() {
         },
         {
           id: "5",
-          title: "Promotion Title",
+          title: "Member Bonus",
           type: "Buy One, Get One",
           startDate: "Fri 29 Aug, 2025 | 02:30 pm",
           endDate: "Fri 5 Sep, 2025 | 02:30 pm",
@@ -230,7 +237,7 @@ export default function Marketing() {
         },
         {
           id: "6",
-          title: "Promotion Title",
+          title: "Early Bird Special",
           type: "Percentage",
           startDate: "Fri 29 Aug, 2025 | 02:30 pm",
           endDate: "Fri 5 Sep, 2025 | 02:30 pm",
@@ -239,12 +246,113 @@ export default function Marketing() {
         },
         {
           id: "7",
-          title: "Promotion Title",
+          title: "Premium Offer",
           type: "Minimum Spend Discount",
           startDate: "Fri 29 Aug, 2025 | 02:30 pm",
           endDate: "Fri 5 Sep, 2025 | 02:30 pm",
           services: "-",
           status: "active",
+        },
+        {
+          id: "8",
+          title: "Birthday Special",
+          type: "Percentage",
+          startDate: "Mon 1 Sep, 2025 | 09:00 am",
+          endDate: "Sun 7 Sep, 2025 | 10:00 pm",
+          services: "Service 1, Service 2",
+          status: "active",
+        },
+        {
+          id: "9",
+          title: "Student Discount",
+          type: "Buy One, Get One",
+          startDate: "Fri 5 Sep, 2025 | 12:00 pm",
+          endDate: "Fri 12 Sep, 2025 | 11:59 pm",
+          services: "Buy: Service 1 Get: Service 2",
+          status: "active",
+        },
+        {
+          id: "10",
+          title: "Family Package",
+          type: "Flash Deals",
+          startDate: "Sat 6 Sep, 2025 | 08:00 am",
+          endDate: "Mon 8 Sep, 2025 | 09:00 pm",
+          services: "Service 1, Service 3",
+          status: "active",
+        },
+        // Paused promotions
+        {
+          id: "11",
+          title: "Spring Promotion",
+          type: "Percentage",
+          startDate: "Mon 1 Mar, 2025 | 10:00 am",
+          endDate: "Wed 31 Mar, 2025 | 10:00 pm",
+          services: "Service 1, Service 2, Service 3",
+          status: "paused",
+        },
+        {
+          id: "12",
+          title: "Valentine's Day",
+          type: "Buy One, Get One",
+          startDate: "Mon 10 Feb, 2025 | 09:00 am",
+          endDate: "Fri 14 Feb, 2025 | 08:00 pm",
+          services: "Buy: Service 1 Get: Service 2",
+          status: "paused",
+        },
+        {
+          id: "13",
+          title: "New Year Deal",
+          type: "Flash Deals",
+          startDate: "Mon 1 Jan, 2025 | 12:00 pm",
+          endDate: "Sun 7 Jan, 2025 | 11:59 pm",
+          services: "Service 1",
+          status: "paused",
+        },
+        {
+          id: "14",
+          title: "Black Friday",
+          type: "Minimum Spend Discount",
+          startDate: "Fri 24 Nov, 2024 | 12:00 am",
+          endDate: "Mon 27 Nov, 2024 | 11:59 pm",
+          services: "Service 1, Service 2",
+          status: "paused",
+        },
+        // Scheduled promotions
+        {
+          id: "15",
+          title: "Christmas Special",
+          type: "Percentage",
+          startDate: "Mon 15 Dec, 2025 | 10:00 am",
+          endDate: "Wed 31 Dec, 2025 | 10:00 pm",
+          services: "Service 1, Service 2, Service 3",
+          status: "scheduled",
+        },
+        {
+          id: "16",
+          title: "New Year 2026",
+          type: "Buy One, Get One",
+          startDate: "Mon 30 Dec, 2025 | 09:00 am",
+          endDate: "Fri 3 Jan, 2026 | 08:00 pm",
+          services: "Buy: Service 1 Get: Service 2",
+          status: "scheduled",
+        },
+        {
+          id: "17",
+          title: "Winter Sale",
+          type: "Flash Deals",
+          startDate: "Mon 1 Dec, 2025 | 12:00 pm",
+          endDate: "Sun 14 Dec, 2025 | 11:59 pm",
+          services: "Service 1",
+          status: "scheduled",
+        },
+        {
+          id: "18",
+          title: "Back to School",
+          type: "Minimum Spend Discount",
+          startDate: "Mon 1 Sep, 2025 | 09:00 am",
+          endDate: "Fri 15 Sep, 2025 | 08:00 pm",
+          services: "Service 1, Service 2",
+          status: "scheduled",
         },
       ];
 
@@ -255,13 +363,11 @@ export default function Marketing() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentBranch]);
+  }, []);
 
   useEffect(() => {
-    if (currentBranch?.id) {
-      fetchPromotionsData();
-    }
-  }, [currentBranch?.id, branchChangeKey, fetchPromotionsData]);
+    fetchPromotionsData();
+  }, [branchChangeKey, fetchPromotionsData]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -524,20 +630,63 @@ export default function Marketing() {
   };
 
   const handleDeleteClick = (promotion: Promotion) => {
-    // TODO: Implement delete functionality
-    console.log("Delete promotion:", promotion);
+    setPromotionToDelete(promotion);
+    setIsDeletePopupOpen(true);
   };
 
-  const handleCancelPromotion = async (promotion: Promotion) => {
+  const handleDeleteCancel = () => {
+    setIsDeletePopupOpen(false);
+    setPromotionToDelete(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!promotionToDelete) return;
+
+    try {
+      // TODO: Replace with actual API call
+      // await axiosClient.delete("/promotions/delete", {
+      //   data: {
+      //     promotion_id: promotionToDelete.id,
+      //     branch_id: currentBranch?.id,
+      //   },
+      // });
+
+      // Update local state
+      setPromotions(prev => prev.filter(p => p.id !== promotionToDelete.id));
+      
+      setIsDeletePopupOpen(false);
+      setPromotionToDelete(null);
+    } catch (error) {
+      console.error("Error deleting promotion:", error);
+      alert("Failed to delete promotion. Please try again.");
+    }
+  };
+
+  const handleCancelPromotionClick = (promotion: Promotion) => {
+    setPromotionToCancel(promotion);
+    setIsCancelPromotionPopupOpen(true);
+  };
+
+  const handleCancelPromotionCancel = () => {
+    setIsCancelPromotionPopupOpen(false);
+    setPromotionToCancel(null);
+  };
+
+  const handleCancelPromotionConfirm = async () => {
+    if (!promotionToCancel) return;
+
     try {
       // TODO: Replace with actual API call
       // await axiosClient.post("/promotions/cancel", {
-      //   promotion_id: promotion.id,
+      //   promotion_id: promotionToCancel.id,
       //   branch_id: currentBranch?.id,
       // });
 
       // Update local state - remove from scheduled (you might want to move to a different status)
-      setPromotions(prev => prev.filter(p => p.id !== promotion.id));
+      setPromotions(prev => prev.filter(p => p.id !== promotionToCancel.id));
+      
+      setIsCancelPromotionPopupOpen(false);
+      setPromotionToCancel(null);
     } catch (error) {
       console.error("Error canceling promotion:", error);
       alert("Failed to cancel promotion. Please try again.");
@@ -545,9 +694,9 @@ export default function Marketing() {
   };
 
   return (
-    <div className="flex-1 min-h-screen bg-[#F9F9F9] md:-ml-6 md:-mr-6 md:-mt-6">
+    <div className="flex flex-col flex-1 min-h-screen bg-[#F9F9F9] md:-ml-6 md:-mr-6 md:-mt-6">
       {/* Top Bar */}
-      <div className="">
+      <div className="flex-shrink-0">
         <div className="main-container flex items-center justify-between bg-white border-b border-gray-200 py-3">
           <h1 className="text-sm font-medium text-black flex items-center">
             <span className="opacity-30">bewe</span>
@@ -565,37 +714,39 @@ export default function Marketing() {
                 2
               </span>
             </button>
-            {selectedView === "promotions" && (
-              <Button 
-                variant="primary" 
-                className="flex items-center gap-2"
-                onClick={() => setIsCreatePromotionSidebarOpen(true)}
-              >
-                <span className="hidden md:inline">Create Promotion</span>
-                <span className="md:hidden">Create</span>
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M16.5 9C16.5 4.85786 13.1421 1.5 9 1.5C4.85786 1.5 1.5 4.85786 1.5 9C1.5 13.1421 4.85786 16.5 9 16.5C13.1421 16.5 16.5 13.1421 16.5 9Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 6V12M12 9H6" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </Button>
-            )}
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-col md:flex-row">
+      <div className="flex flex-col md:flex-row flex-1 md:items-stretch">
         {/* Left Sidebar - Sub Navigation */}
-        <div className="hidden md:block w-64 bg-white border-r border-gray-200 p-6">
+        <div 
+          className="hidden md:block bg-white p-6 ml-6 mt-6 self-stretch"
+          style={{
+            width: "314px",
+            border: "1px solid rgba(0, 0, 0, 0.08)"
+          }}
+        >
           <h2 className="text-lg font-bold text-black mb-6">Marketing</h2>
           <div className="space-y-2">
             <button
               onClick={() => setSelectedView("promotions")}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                 selectedView === "promotions"
-                  ? "bg-primary/10 text-primary"
-                  : "text-black/60 hover:bg-gray-50"
+                  ? "bg-[#F5F3F7] text-black"
+                  : "text-black/60"
               }`}
+              onMouseEnter={(e) => {
+                if (selectedView !== "promotions") {
+                  e.currentTarget.style.backgroundColor = "#F5F3F7";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (selectedView !== "promotions") {
+                  e.currentTarget.style.backgroundColor = "";
+                }
+              }}
             >
               Promotions & Deals
             </button>
@@ -603,21 +754,21 @@ export default function Marketing() {
               onClick={() => setSelectedView("notifications")}
               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                 selectedView === "notifications"
-                  ? "bg-primary/10 text-primary"
-                  : "text-black/60 hover:bg-gray-50"
+                  ? "bg-[#F5F3F7] text-black"
+                  : "text-black/60"
               }`}
+              onMouseEnter={(e) => {
+                if (selectedView !== "notifications") {
+                  e.currentTarget.style.backgroundColor = "#F5F3F7";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (selectedView !== "notifications") {
+                  e.currentTarget.style.backgroundColor = "";
+                }
+              }}
             >
               Automated Notifications
-            </button>
-            <button
-              onClick={() => setSelectedView("services-pricing")}
-              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                selectedView === "services-pricing"
-                  ? "bg-primary/10 text-primary"
-                  : "text-black/60 hover:bg-gray-50"
-              }`}
-            >
-              Services & Pricing
             </button>
           </div>
         </div>
@@ -645,16 +796,6 @@ export default function Marketing() {
             >
               Automated Notifications
             </button>
-            <button
-              onClick={() => setSelectedView("services-pricing")}
-              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium rounded transition-colors cursor-pointer whitespace-nowrap flex-shrink-0 ${
-                selectedView === "services-pricing"
-                  ? "bg-primary/10 text-primary"
-                  : "text-black/60 hover:bg-gray-50"
-              }`}
-            >
-              Services & Pricing
-            </button>
           </div>
         </div>
 
@@ -663,34 +804,49 @@ export default function Marketing() {
           {selectedView === "promotions" ? (
             <>
               {/* Tabs */}
-              <div className="flex items-center gap-1.5 sm:gap-2 mb-4 md:mb-6 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                {(["Active", "Paused", "Scheduled", "Expired"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setSelectedTab(tab)}
-                    className={`px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium rounded transition-colors cursor-pointer whitespace-nowrap flex-shrink-0 ${
-                      selectedTab === tab
-                        ? "bg-black text-white"
-                        : "bg-white text-black/60 hover:bg-gray-50"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between gap-1.5 sm:gap-2 mb-4 md:mb-6">
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {(["Active", "Paused", "Scheduled", "Expired"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setSelectedTab(tab)}
+                      className={`px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium rounded transition-colors cursor-pointer whitespace-nowrap flex-shrink-0 ${
+                        selectedTab === tab
+                          ? "bg-black text-white"
+                          : "bg-white text-black/60 hover:bg-gray-50"
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+                <Button 
+                  variant="primary" 
+                  className="flex items-center gap-2 flex-shrink-0"
+                  onClick={() => setIsCreatePromotionSidebarOpen(true)}
+                >
+                  <span className="hidden md:inline">Create Promotion</span>
+                  <span className="md:hidden">Create</span>
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16.5 9C16.5 4.85786 13.1421 1.5 9 1.5C4.85786 1.5 1.5 4.85786 1.5 9C1.5 13.1421 4.85786 16.5 9 16.5C13.1421 16.5 16.5 13.1421 16.5 9Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M9 6V12M12 9H6" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </Button>
               </div>
 
               {/* Search and Filters - Desktop */}
               <div className="hidden md:flex items-start justify-between gap-4 mb-4">
-                <div className="flex items-center gap-4 flex-1">
-                  {/* Search Input */}
-                  <div className="flex-1 max-w-md">
-                    <SearchInput
-                      placeholder="Search by Promotion title"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
+                {/* Search Input */}
+                <div className="flex-1 max-w-md">
+                  <SearchInput
+                    placeholder="Search by Promotion title"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
 
+                {/* Type Filter and Date Fields - Grouped together on the right */}
+                <div className="flex items-center gap-4">
                   {/* Type Filter */}
                   <div className="relative">
                     <select
@@ -718,39 +874,63 @@ export default function Marketing() {
                   {/* From Date */}
                   <div className="relative">
                     <input
+                      id="from-date-input"
                       type="date"
                       value={fromDate}
                       onChange={(e) => setFromDate(e.target.value)}
-                      className="px-4 py-3 pr-8 border border-black/10 rounded-[5px] focus:outline-none focus:ring-1 focus:ring-primary text-xs bg-white cursor-pointer"
-                      placeholder="From: dd/mm/yyyy"
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
                     />
-                    <svg
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                    <div className="px-4 py-3 pr-12 border border-black/10 rounded-[5px] text-xs bg-white pointer-events-none flex items-center gap-2">
+                      <span className="text-gray-500">From:</span>
+                      <span className="text-black">
+                        {fromDate ? new Date(fromDate + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'dd/mm/yyyy'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const input = document.getElementById('from-date-input') as HTMLInputElement;
+                        input?.showPicker?.() || input?.click();
+                      }}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer z-20"
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 2V6M8 2V6" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M13 4H11C7.22876 4 5.34315 4 4.17157 5.17157C3 6.34315 3 8.22876 3 12V14C3 17.7712 3 19.6569 4.17157 20.8284C5.34315 22 7.22876 22 11 22H13C16.7712 22 18.6569 22 19.8284 20.8284C21 19.6569 21 17.7712 21 14V12C21 8.22876 21 6.34315 19.8284 5.17157C18.6569 4 16.7712 4 13 4Z" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M3 10H21" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
                   </div>
 
                   {/* To Date */}
                   <div className="relative">
                     <input
+                      id="to-date-input"
                       type="date"
                       value={toDate}
                       onChange={(e) => setToDate(e.target.value)}
-                      className="px-4 py-3 pr-8 border border-black/10 rounded-[5px] focus:outline-none focus:ring-1 focus:ring-primary text-xs bg-white cursor-pointer"
-                      placeholder="To: dd/mm/yyyy"
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
                     />
-                    <svg
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                    <div className="px-4 py-3 pr-12 border border-black/10 rounded-[5px] text-xs bg-white pointer-events-none flex items-center gap-2">
+                      <span className="text-gray-500">To:</span>
+                      <span className="text-black">
+                        {toDate ? new Date(toDate + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'dd/mm/yyyy'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const input = document.getElementById('to-date-input') as HTMLInputElement;
+                        input?.showPicker?.() || input?.click();
+                      }}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer z-20"
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 2V6M8 2V6" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M13 4H11C7.22876 4 5.34315 4 4.17157 5.17157C3 6.34315 3 8.22876 3 12V14C3 17.7712 3 19.6569 4.17157 20.8284C5.34315 22 7.22876 22 11 22H13C16.7712 22 18.6569 22 19.8284 20.8284C21 19.6569 21 17.7712 21 14V12C21 8.22876 21 6.34315 19.8284 5.17157C18.6569 4 16.7712 4 13 4Z" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M3 10H21" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -979,11 +1159,11 @@ export default function Marketing() {
                                 )}
                                 {selectedTab === "Scheduled" && (
                                   <>
-                                    <button
-                                      onClick={() => handleCancelPromotion(promotion)}
-                                      className="h-[32px] w-[32px] flex items-center justify-center border border-red-500 rounded hover:bg-red-50 transition-colors cursor-pointer"
-                                      title="Cancel promotion"
-                                    >
+                                <button
+                                  onClick={() => handleCancelPromotionClick(promotion)}
+                                  className="h-[32px] w-[32px] flex items-center justify-center border border-red-500 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                                  title="Cancel promotion"
+                                >
                                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <path d="M12 4L4 12M4 4L12 12" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                                       </svg>
@@ -1004,30 +1184,6 @@ export default function Marketing() {
                     </tbody>
                   </table>
                 </div>
-                
-                {/* Pagination - Desktop */}
-                {filteredPromotions.length > 0 && (
-                  <div className="hidden md:flex px-4 py-3 bg-gray-50 border-t border-gray-200 items-center justify-between">
-                    <div className="text-sm text-gray-700">
-                      Showing {paginatedPromotions.length} out of {filteredPromotions.length}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => i + 1).map((page) => (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`px-3 py-1 text-sm rounded cursor-pointer ${
-                            currentPage === page
-                              ? "bg-primary text-white"
-                              : "bg-white text-gray-700 hover:bg-gray-100"
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Promotions Table - Mobile/Tablet */}
@@ -1112,7 +1268,7 @@ export default function Marketing() {
                             {selectedTab === "Scheduled" && (
                               <>
                                 <button
-                                  onClick={() => handleCancelPromotion(promotion)}
+                                  onClick={() => handleCancelPromotionClick(promotion)}
                                   className="h-[28px] w-[28px] md:h-[32px] md:w-[32px] flex items-center justify-center border border-red-500 rounded hover:bg-red-50 transition-colors cursor-pointer flex-shrink-0"
                                   title="Cancel promotion"
                                 >
@@ -1136,34 +1292,10 @@ export default function Marketing() {
                     ))}
                   </div>
                 )}
-                
-                {/* Pagination - Mobile/Tablet */}
-                {filteredPromotions.length > 0 && (
-                  <div className="block md:hidden px-4 py-3 bg-gray-50 border-t border-gray-200">
-                    <div className="text-xs text-gray-700 mb-3 text-center">
-                      Showing {paginatedPromotions.length} out of {filteredPromotions.length}
-                    </div>
-                    <div className="flex items-center justify-center gap-2 overflow-x-auto">
-                      {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => i + 1).map((page) => (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`px-2.5 py-1 text-xs rounded whitespace-nowrap ${
-                            currentPage === page
-                              ? "bg-primary text-white"
-                              : "bg-white text-gray-700 hover:bg-gray-100"
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </>
           ) : selectedView === "notifications" ? (
-            <div className="bg-white rounded-lg shadow-sm p-4 md:p-6">
+            <div>
               <div className="mb-6 md:mb-8">
                 <h3 className="text-base md:text-lg font-bold text-black mb-2">Automated Notifications</h3>
                 <p className="text-xs md:text-sm text-black/60">
@@ -1355,17 +1487,6 @@ export default function Marketing() {
                       )}
                     </div>
                   </div>
-                </div>
-
-                {/* Empty card with menu */}
-                <div className="border border-black/10 rounded-lg p-5 flex items-end justify-end">
-                  <button className="text-black/40 hover:text-black/60 transition-colors cursor-pointer">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
-                      <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
-                      <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
-                    </svg>
-                  </button>
                 </div>
               </div>
             </div>
@@ -1650,6 +1771,33 @@ export default function Marketing() {
         </div>
       </Popup>
 
+      {/* Cancel Promotion Confirmation Popup */}
+      <Popup
+        isOpen={isCancelPromotionPopupOpen}
+        onClose={handleCancelPromotionCancel}
+        title="Cancel Promotion"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Are you sure you want to cancel this promotion?
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-4">
+            <Button
+              variant="transparent"
+              onClick={handleCancelPromotionCancel}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleCancelPromotionConfirm}
+            >
+              Confirm
+            </Button>
+          </div>
+        </div>
+      </Popup>
+
       {/* Edit Promotion Sidebar */}
       {isEditSidebarOpen && promotionToEdit && (
         <EditPromotionSidebar
@@ -1679,6 +1827,33 @@ export default function Marketing() {
         />
       )}
 
+      {/* Delete Confirmation Popup */}
+      <Popup
+        isOpen={isDeletePopupOpen}
+        onClose={handleDeleteCancel}
+        title="Delete Promotion"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Are you sure you want to delete <span className="font-semibold">"{promotionToDelete?.title}"</span>? This action cannot be undone.
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-4">
+            <Button
+              variant="transparent"
+              onClick={handleDeleteCancel}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleDeleteConfirm}
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      </Popup>
+
       {/* Settings Sidebar */}
       {isSettingsSidebarOpen && (
         <div className="fixed inset-0 z-[100] flex justify-end">
@@ -1698,7 +1873,7 @@ export default function Marketing() {
                   <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
-    </div>
+            </div>
 
             {/* Content */}
             <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
@@ -1816,9 +1991,9 @@ export default function Marketing() {
             className="absolute inset-0 bg-black/50"
             onClick={() => setIsSendMessageModalOpen(false)}
           />
-          <div className="relative w-full md:w-[90%] md:max-w-4xl bg-white h-full shadow-xl overflow-y-auto flex flex-col">
+          <div className="relative w-full md:w-[784px] bg-[#F9F9F9] h-screen border border-black/10 shadow-xl overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 md:p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 md:p-6 border-b border-gray-200 bg-white">
               <h2 className="text-base md:text-lg font-semibold text-black">Send Automated Message</h2>
               <button
                 onClick={() => setIsSendMessageModalOpen(false)}
@@ -1831,96 +2006,81 @@ export default function Marketing() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
+            <div className="flex-1 p-4 md:p-6 pb-2 space-y-4 md:space-y-6 overflow-y-auto">
               {/* Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+              <div className="flex flex-col md:flex-row md:items-end gap-3 md:gap-4">
                 {/* Service Filter */}
-                <div>
+                <div className="flex-1">
                   <label className="block text-sm font-medium text-black mb-2">Service:</label>
-                  <div className="relative">
-                    <select
-                      value={sendMessageFilters.service}
-                      onChange={(e) => setSendMessageFilters({ ...sendMessageFilters, service: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-black/10 rounded-lg appearance-none bg-white cursor-pointer focus:outline-none focus:border-primary text-sm"
-                    >
-                      <option value="All Services">All Services</option>
-                      <option value="Haircut">Haircut</option>
-                      <option value="Hair Color">Hair Color</option>
-                      <option value="Hair Treatment">Hair Treatment</option>
-                    </select>
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                  </div>
+                  <ServiceDropdown
+                    selectedService={sendMessageFilters.service}
+                    onSelect={(service) => setSendMessageFilters({ ...sendMessageFilters, service })}
+                  />
                 </div>
 
                 {/* From Date */}
-                <div>
-                  <label className="block text-sm font-medium text-black mb-2">From:</label>
+                <div className="flex-1">
                   <div className="relative">
                     <input
-                      type="text"
-                      placeholder="dd/mm/yyyy"
-                      value={sendMessageFilters.fromDate}
-                      readOnly
-                      className="w-full px-4 py-2.5 border border-black/10 rounded-lg bg-white cursor-pointer focus:outline-none focus:border-primary text-sm pr-10"
-                    />
-                    <input
+                      id="send-message-from-date-input"
                       type="date"
-                      onChange={(e) => {
-                        const date = e.target.value;
-                        if (date) {
-                          const [year, month, day] = date.split('-');
-                          const formatted = `${day}/${month}/${year}`;
-                          setSendMessageFilters({ ...sendMessageFilters, fromDate: formatted });
-                        } else {
-                          setSendMessageFilters({ ...sendMessageFilters, fromDate: "" });
-                        }
-                      }}
-                      className="absolute right-0 top-0 opacity-0 cursor-pointer z-20"
-                      style={{ width: '48px', height: '100%' }}
+                      value={sendMessageFromDate}
+                      onChange={(e) => setSendMessageFromDate(e.target.value)}
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
                     />
-                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 flex items-center justify-center pointer-events-none z-10">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                    <div className="px-3 py-2 pr-12 border border-black/10 rounded-[5px] text-xs bg-white pointer-events-none flex items-center gap-2">
+                      <span className="text-gray-500">From:</span>
+                      <span className="text-black">
+                        {sendMessageFromDate ? new Date(sendMessageFromDate + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'dd/mm/yyyy'}
+                      </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const input = document.getElementById('send-message-from-date-input') as HTMLInputElement;
+                        input?.showPicker?.() || input?.click();
+                      }}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer z-20"
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 2V6M8 2V6" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M13 4H11C7.22876 4 5.34315 4 4.17157 5.17157C3 6.34315 3 8.22876 3 12V14C3 17.7712 3 19.6569 4.17157 20.8284C5.34315 22 7.22876 22 11 22H13C16.7712 22 18.6569 22 19.8284 20.8284C21 19.6569 21 17.7712 21 14V12C21 8.22876 21 6.34315 19.8284 5.17157C18.6569 4 16.7712 4 13 4Z" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M3 10H21" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
                   </div>
                 </div>
 
                 {/* To Date */}
-                <div>
-                  <label className="block text-sm font-medium text-black mb-2">To:</label>
+                <div className="flex-1">
                   <div className="relative">
                     <input
-                      type="text"
-                      placeholder="dd/mm/yyyy"
-                      value={sendMessageFilters.toDate}
-                      readOnly
-                      className="w-full px-4 py-2.5 border border-black/10 rounded-lg bg-white cursor-pointer focus:outline-none focus:border-primary text-sm pr-10"
-                    />
-                    <input
+                      id="send-message-to-date-input"
                       type="date"
-                      onChange={(e) => {
-                        const date = e.target.value;
-                        if (date) {
-                          const [year, month, day] = date.split('-');
-                          const formatted = `${day}/${month}/${year}`;
-                          setSendMessageFilters({ ...sendMessageFilters, toDate: formatted });
-                        } else {
-                          setSendMessageFilters({ ...sendMessageFilters, toDate: "" });
-                        }
-                      }}
-                      className="absolute right-0 top-0 opacity-0 cursor-pointer z-20"
-                      style={{ width: '48px', height: '100%' }}
+                      value={sendMessageToDate}
+                      onChange={(e) => setSendMessageToDate(e.target.value)}
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
                     />
-                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 flex items-center justify-center pointer-events-none z-10">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                    <div className="px-3 py-2 pr-12 border border-black/10 rounded-[5px] text-xs bg-white pointer-events-none flex items-center gap-2">
+                      <span className="text-gray-500">To:</span>
+                      <span className="text-black">
+                        {sendMessageToDate ? new Date(sendMessageToDate + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'dd/mm/yyyy'}
+                      </span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const input = document.getElementById('send-message-to-date-input') as HTMLInputElement;
+                        input?.showPicker?.() || input?.click();
+                      }}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer z-20"
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 2V6M8 2V6" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M13 4H11C7.22876 4 5.34315 4 4.17157 5.17157C3 6.34315 3 8.22876 3 12V14C3 17.7712 3 19.6569 4.17157 20.8284C5.34315 22 7.22876 22 11 22H13C16.7712 22 18.6569 22 19.8284 20.8284C21 19.6569 21 17.7712 21 14V12C21 8.22876 21 6.34315 19.8284 5.17157C18.6569 4 16.7712 4 13 4Z" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M3 10H21" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2110,25 +2270,94 @@ export default function Marketing() {
             </div>
 
             {/* Footer Buttons */}
-            <div className="p-4 md:p-6 border-t border-gray-200 bg-white sticky bottom-0">
-              <div className="flex items-center justify-end gap-2 md:gap-3">
-                <button
-                  onClick={() => setIsSendMessageModalOpen(false)}
-                  className="px-4 md:px-6 py-2 md:py-2.5 bg-white border border-black/10 rounded-lg text-xs md:text-sm font-medium text-black/60 hover:bg-gray-50 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    // Handle send reminder
-                    setIsSendMessageModalOpen(false);
-                  }}
-                  className="px-4 md:px-6 py-2 md:py-2.5 bg-primary rounded-lg text-xs md:text-sm font-medium text-white hover:bg-primary/90 transition-colors cursor-pointer"
-                >
-                  Send Reminder
-                </button>
-              </div>
+            <div className="flex-shrink-0 flex items-center justify-end gap-3 md:gap-4 p-4 md:p-6 border-t border-gray-200 bg-[#F9F9F9]">
+              <button
+                onClick={() => setIsSendMessageModalOpen(false)}
+                className="flex-[1] px-4 md:px-6 py-2 md:py-2.5 bg-white border border-black/10 rounded-lg text-xs md:text-sm font-medium text-black/60 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  // Handle send reminder
+                  setIsSendMessageModalOpen(false);
+                }}
+                className="flex-[3] px-4 md:px-6 py-2 md:py-2.5 bg-primary rounded-lg text-xs md:text-sm font-medium text-white hover:bg-primary/90 transition-colors cursor-pointer"
+              >
+                Send Reminder
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Service Dropdown Component
+function ServiceDropdown({
+  selectedService,
+  onSelect,
+}: {
+  selectedService: string;
+  onSelect: (service: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const services = ["All Services", "Haircut", "Hair Color", "Hair Treatment"];
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleServiceChange = (service: string) => {
+    onSelect(service);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-2 w-full px-3 py-2 pr-8 border border-black/10 rounded-[5px] text-xs font-medium transition-colors focus:outline-none ${
+          isOpen 
+            ? "bg-black text-white" 
+            : "bg-white hover:bg-black hover:text-white"
+        }`}
+      >
+        <span className="flex-1 text-left whitespace-nowrap truncate min-w-0">{selectedService}</span>
+        <svg
+          className={`w-4 h-4 transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 mt-2 w-full bg-white border border-black/10 rounded-[5px] shadow-lg z-50 max-h-60 overflow-auto">
+          <div>
+            {services.map((service) => (
+              <button
+                key={service}
+                onClick={() => handleServiceChange(service)}
+                className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-black hover:text-white transition-colors rounded-[5px] ${
+                  selectedService === service ? "bg-black/10 text-black" : "text-gray-700"
+                }`}
+              >
+                {service}
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -2201,6 +2430,7 @@ function EditPromotionSidebar({
 }) {
   const [isAnimating, setIsAnimating] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [isSaveConfirmPopupOpen, setIsSaveConfirmPopupOpen] = useState(false);
   
   const parsedStart = parseDateString(promotion.startDate);
   const parsedEnd = parseDateString(promotion.endDate);
@@ -2238,6 +2468,10 @@ function EditPromotionSidebar({
   };
 
   const handleSave = () => {
+    setIsSaveConfirmPopupOpen(true);
+  };
+
+  const handleSaveConfirm = () => {
     const updatedPromotion: Promotion = {
       ...promotion,
       title: formData.title,
@@ -2257,6 +2491,12 @@ function EditPromotionSidebar({
     }
 
     onSave(updatedPromotion);
+    setIsSaveConfirmPopupOpen(false);
+    handleClose();
+  };
+
+  const handleSaveCancel = () => {
+    setIsSaveConfirmPopupOpen(false);
   };
 
   const checkIfExpired = (endDateString: string): boolean => {
@@ -2441,6 +2681,33 @@ function EditPromotionSidebar({
           </div>
         </div>
       </div>
+
+      {/* Save Changes Confirmation Popup */}
+      <Popup
+        isOpen={isSaveConfirmPopupOpen}
+        onClose={handleSaveCancel}
+        title="Save Changes"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Are you sure you want to save these changes?
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-4">
+            <Button
+              variant="transparent"
+              onClick={handleSaveCancel}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSaveConfirm}
+            >
+              Save Changes
+            </Button>
+          </div>
+        </div>
+      </Popup>
     </div>
   );
 }
@@ -2727,7 +2994,7 @@ function CreatePromotionSidebar({
         }`}
         onClick={handleClose}
       />
-      <div className={`flex flex-col relative w-full md:w-[32%] bg-[#F9F9F9] h-full shadow-xl overflow-y-auto transform transition-all duration-300 ease-in-out ${
+      <div className={`flex flex-col relative w-full md:w-[573px] bg-[#F9F9F9] h-[1117px] border border-black/10 shadow-xl overflow-hidden transform transition-all duration-300 ease-in-out ${
         isAnimating && !isClosing ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
       }`}>
         {/* Header */}
@@ -2780,7 +3047,7 @@ function CreatePromotionSidebar({
         </div>
 
         {/* Step Content */}
-        <div className="p-4 md:p-6 pt-3">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-3">
           {/* Step 1: Promotion Type */}
           {currentStep === 1 && (
             <div>
@@ -3486,20 +3753,20 @@ function CreatePromotionSidebar({
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-between gap-3 md:gap-4 pt-4 md:pt-6 border-t border-gray-200 sticky bottom-0 bg-[#F9F9F9] pb-4 md:pb-0">
+          <div className="flex-shrink-0 flex items-center gap-3 md:gap-4 p-4 md:p-6 border-t border-gray-200 bg-[#F9F9F9]">
             {currentStep === 1 ? (
               <>
                 <Button
                   variant="transparent"
                   onClick={handleClose}
-                  className="flex-1 text-xs md:text-sm"
+                  className="flex-[1] text-xs md:text-sm"
                 >
                   Cancel
                 </Button>
                 <Button
                   variant="primary"
                   onClick={handleContinue}
-                  className="flex-1 text-xs md:text-sm"
+                  className="flex-[3] text-xs md:text-sm"
                 >
                   Continue
                 </Button>
@@ -3509,14 +3776,14 @@ function CreatePromotionSidebar({
                 <Button
                   variant="transparent"
                   onClick={handlePrevious}
-                  className="flex-1 text-xs md:text-sm"
+                  className="flex-[1] text-xs md:text-sm"
                 >
                   Previous
                 </Button>
                 <Button
                   variant="primary"
                   onClick={handleContinue}
-                  className="flex-1 text-xs md:text-sm"
+                  className="flex-[3] text-xs md:text-sm"
                   disabled={isSaving}
                 >
                   {isSaving ? "Saving..." : "Create Promotion"}

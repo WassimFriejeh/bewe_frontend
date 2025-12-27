@@ -13,6 +13,7 @@ interface Membership {
   price: string;
   duration: string;
   isActive: boolean;
+  status?: "active" | "paused" | "scheduled";
 }
 
 export default function Memberships() {
@@ -21,6 +22,7 @@ export default function Memberships() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [selectedTab, setSelectedTab] = useState<"Active" | "Paused" | "Scheduled">("Active");
   const [isCreateMembershipSidebarOpen, setIsCreateMembershipSidebarOpen] = useState(false);
   const [membershipForm, setMembershipForm] = useState({
     title: "",
@@ -57,14 +59,15 @@ export default function Memberships() {
     },
   });
   const [memberships, setMemberships] = useState<Membership[]>([
-    { id: "1", title: "Membership Title Goes Here", price: "$99.00", duration: "6 months", isActive: true },
-    { id: "2", title: "Membership Title Goes Here", price: "$99.00", duration: "6 months", isActive: true },
-    { id: "3", title: "Membership Title Goes Here", price: "$99.00", duration: "6 months", isActive: false },
-    { id: "4", title: "Membership Title Goes Here", price: "$99.00", duration: "6 months", isActive: false },
-    { id: "5", title: "Membership Title Goes Here", price: "$99.00", duration: "6 months", isActive: false },
-    { id: "6", title: "Membership Title Goes Here", price: "$99.00", duration: "6 months", isActive: false },
-    { id: "7", title: "Membership Title Goes Here", price: "$99.00", duration: "6 months", isActive: false },
-    { id: "8", title: "Membership Title Goes Here", price: "$99.00", duration: "6 months", isActive: false },
+    { id: "1", title: "Premium Membership", price: "$99.00", duration: "6 months", isActive: true, status: "active" },
+    { id: "2", title: "Basic Membership", price: "$49.00", duration: "3 months", isActive: true, status: "active" },
+    { id: "3", title: "Gold Membership", price: "$149.00", duration: "12 months", isActive: true, status: "active" },
+    { id: "4", title: "Silver Membership", price: "$79.00", duration: "6 months", isActive: false, status: "paused" },
+    { id: "5", title: "Platinum Membership", price: "$199.00", duration: "12 months", isActive: false, status: "paused" },
+    { id: "6", title: "Bronze Membership", price: "$29.00", duration: "1 month", isActive: false, status: "paused" },
+    { id: "7", title: "VIP Membership", price: "$299.00", duration: "12 months", isActive: false, status: "scheduled" },
+    { id: "8", title: "Student Membership", price: "$39.00", duration: "3 months", isActive: false, status: "scheduled" },
+    { id: "9", title: "Corporate Membership", price: "$399.00", duration: "12 months", isActive: false, status: "scheduled" },
   ]);
 
   const handleSort = (column: string) => {
@@ -86,9 +89,21 @@ export default function Memberships() {
     );
   };
 
-  const filteredMemberships = memberships.filter(membership =>
-    membership.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredMemberships = memberships.filter(membership => {
+    // Filter by search query
+    const matchesSearch = membership.title.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Filter by status tab
+    const statusMap: { [key: string]: "active" | "paused" | "scheduled" } = {
+      "Active": "active",
+      "Paused": "paused",
+      "Scheduled": "scheduled",
+    };
+    const targetStatus = statusMap[selectedTab];
+    const matchesStatus = membership.status === targetStatus;
+    
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="flex-1 min-h-screen bg-[#F9F9F9] -ml-6 -mr-6 -mt-6">
@@ -111,24 +126,43 @@ export default function Memberships() {
                 2
               </span>
             </button>
-            <Button 
-              variant="primary" 
-              className="flex items-center gap-2 cursor-pointer"
-              onClick={() => setIsCreateMembershipSidebarOpen(true)}
-            >
-              <span className="hidden md:inline">Create Membership</span>
-              <span className="md:hidden">Create</span>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M16.5 9C16.5 4.85786 13.1421 1.5 9 1.5C4.85786 1.5 1.5 4.85786 1.5 9C1.5 13.1421 4.85786 16.5 9 16.5C13.1421 16.5 16.5 13.1421 16.5 9Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M9 6V12M12 9H6" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </Button>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="p-3 md:p-6">
+        {/* Tabs and Create Membership Button */}
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2 mb-4 md:mb-6">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {(["Active", "Paused", "Scheduled"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setSelectedTab(tab)}
+                className={`px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium rounded transition-colors cursor-pointer whitespace-nowrap flex-shrink-0 ${
+                  selectedTab === tab
+                    ? "bg-black text-white"
+                    : "bg-white text-black/60 hover:bg-gray-50"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          <Button 
+            variant="primary" 
+            className="flex items-center gap-2 flex-shrink-0"
+            onClick={() => setIsCreateMembershipSidebarOpen(true)}
+          >
+            <span className="hidden md:inline">Create Membership</span>
+            <span className="md:hidden">Create</span>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16.5 9C16.5 4.85786 13.1421 1.5 9 1.5C4.85786 1.5 1.5 4.85786 1.5 9C1.5 13.1421 4.85786 16.5 9 16.5C13.1421 16.5 16.5 13.1421 16.5 9Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M9 6V12M12 9H6" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </Button>
+        </div>
+
         <div className="bg-white rounded-lg shadow-sm">
           {/* Title and Search */}
           <div className="p-3 md:p-6 border-b border-gray-200">
