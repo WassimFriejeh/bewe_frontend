@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useBranch } from "../../contexts/BranchContext";
 import BranchSelector from "../../components/BranchSelector";
@@ -22,7 +22,6 @@ export default function Memberships() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [selectedTab, setSelectedTab] = useState<"Active" | "Paused" | "Scheduled">("Active");
   const [isCreateMembershipSidebarOpen, setIsCreateMembershipSidebarOpen] = useState(false);
   const [membershipForm, setMembershipForm] = useState({
     title: "",
@@ -38,6 +37,9 @@ export default function Memberships() {
     isActive: true,
   });
   const [expandedCategories, setExpandedCategories] = useState<{ [key: string]: boolean }>({});
+  const [openMembershipMenuId, setOpenMembershipMenuId] = useState<string | null>(null);
+  const [menuPositionAbove, setMenuPositionAbove] = useState<{ [key: string]: boolean }>({});
+  const menuButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
   const [categoryServices, setCategoryServices] = useState<{ [key: string]: { [key: string]: boolean } }>({
     category1: {
       "Service 1": false,
@@ -93,17 +95,44 @@ export default function Memberships() {
     // Filter by search query
     const matchesSearch = membership.title.toLowerCase().includes(searchQuery.toLowerCase());
     
-    // Filter by status tab
-    const statusMap: { [key: string]: "active" | "paused" | "scheduled" } = {
-      "Active": "active",
-      "Paused": "paused",
-      "Scheduled": "scheduled",
-    };
-    const targetStatus = statusMap[selectedTab];
-    const matchesStatus = membership.status === targetStatus;
-    
-    return matchesSearch && matchesStatus;
+    return matchesSearch;
   });
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openMembershipMenuId) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.membership-menu-container')) {
+          setOpenMembershipMenuId(null);
+        }
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openMembershipMenuId]);
+
+  // Check if menu should appear above button
+  useEffect(() => {
+    if (openMembershipMenuId) {
+      const button = menuButtonRefs.current[openMembershipMenuId];
+      if (button) {
+        const rect = button.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const spaceBelow = viewportHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const menuHeight = 150; // Approximate height of the dropdown menu
+        
+        // If there's not enough space below but enough space above, show above
+        if (spaceBelow < menuHeight && spaceAbove > menuHeight) {
+          setMenuPositionAbove(prev => ({ ...prev, [openMembershipMenuId]: true }));
+        } else {
+          setMenuPositionAbove(prev => ({ ...prev, [openMembershipMenuId]: false }));
+        }
+      }
+    }
+  }, [openMembershipMenuId]);
 
   return (
     <div className="flex-1 min-h-screen bg-[#F9F9F9] -ml-6 -mr-6 -mt-6">
@@ -132,23 +161,9 @@ export default function Memberships() {
 
       {/* Main Content */}
       <div className="p-3 md:p-6">
-        {/* Tabs and Create Membership Button */}
-        <div className="flex items-center justify-between gap-1.5 sm:gap-2 mb-4 md:mb-6">
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            {(["Active", "Paused", "Scheduled"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setSelectedTab(tab)}
-                className={`px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-medium rounded transition-colors cursor-pointer whitespace-nowrap flex-shrink-0 ${
-                  selectedTab === tab
-                    ? "bg-black text-white"
-                    : "bg-white text-black/60 hover:bg-gray-50"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+        {/* Title and Create Membership Button */}
+        <div className="flex items-center justify-between mb-4 md:mb-6">
+          <h2 className="text-base md:text-2xl font-bold text-black">Memberships</h2>
           <Button 
             variant="primary" 
             className="flex items-center gap-2 flex-shrink-0"
@@ -163,82 +178,196 @@ export default function Memberships() {
           </Button>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm">
-          {/* Title and Search */}
-          <div className="p-3 md:p-6 border-b border-gray-200">
-            <h2 className="text-base md:text-2xl font-bold text-black mb-3 md:mb-4">Memberships</h2>
-            <div className="w-full md:max-w-md">
-              <SearchInput
-                placeholder="Search by membership title"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+        {/* Search */}
+        <div className="mb-4 md:mb-6">
+          <div className="w-full md:max-w-lg">
+            <SearchInput
+              placeholder="Search by membership title"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
+        </div>
 
+        {/* Table Container */}
+        <div className="bg-white rounded-lg shadow-sm">
           {/* Table - Desktop */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="sticky top-0 z-10 bg-white border-b border-gray-200">
                 <tr>
                   <th
-                    className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100"
+                    className="group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer"
                     onClick={() => handleSort("title")}
                   >
                     <div className="flex items-center gap-2">
                       Membership Title
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M4 6L8 2L12 6M4 10L8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <svg 
+                        width="15" 
+                        height="15" 
+                        viewBox="0 0 18 18" 
+                        fill="none" 
+                        xmlns="http://www.w3.org/2000/svg"
+                        className={`transition-colors ${
+                          sortColumn === "title" 
+                            ? "text-primary opacity-100" 
+                            : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
+                        }`}
+                      >
+                        <path 
+                          d="M5.25 3V15" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M12.75 14.25V3" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </div>
                   </th>
                   <th
-                    className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100"
+                    className="group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer"
                     onClick={() => handleSort("price")}
                   >
                     <div className="flex items-center gap-2">
                       Price
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M4 6L8 2L12 6M4 10L8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <svg 
+                        width="15" 
+                        height="15" 
+                        viewBox="0 0 18 18" 
+                        fill="none" 
+                        xmlns="http://www.w3.org/2000/svg"
+                        className={`transition-colors ${
+                          sortColumn === "price" 
+                            ? "text-primary opacity-100" 
+                            : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
+                        }`}
+                      >
+                        <path 
+                          d="M5.25 3V15" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M12.75 14.25V3" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </div>
                   </th>
                   <th
-                    className="px-6 py-4 text-left text-sm font-medium text-black cursor-pointer hover:bg-gray-100"
+                    className="group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer"
                     onClick={() => handleSort("duration")}
                   >
                     <div className="flex items-center gap-2">
                       Duration
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M4 6L8 2L12 6M4 10L8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <svg 
+                        width="15" 
+                        height="15" 
+                        viewBox="0 0 18 18" 
+                        fill="none" 
+                        xmlns="http://www.w3.org/2000/svg"
+                        className={`transition-colors ${
+                          sortColumn === "duration" 
+                            ? "text-primary opacity-100" 
+                            : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
+                        }`}
+                      >
+                        <path 
+                          d="M5.25 3V15" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M12.75 14.25V3" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
+                        <path 
+                          d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
+                          stroke="currentColor" 
+                          strokeWidth="1.5" 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-black">
+                  <th className="px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize">
                     Active / Inactive
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-black">
+                  <th className="px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredMemberships.map((membership, index) => (
+                {filteredMemberships.map((membership) => (
                   <tr
                     key={membership.id}
-                    className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100 cursor-pointer`}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => router.push(`/memberships/subscribers?id=${membership.id}&title=${encodeURIComponent(membership.title)}&price=${encodeURIComponent(membership.price)}&duration=${encodeURIComponent(membership.duration)}`)}
                   >
-                    <td className="px-6 py-4 text-sm text-black">
+                    <td className="px-5 py-4 text-xs font-normal text-black/80">
                       {membership.title}
                     </td>
-                    <td className="px-6 py-4 text-sm text-black">
+                    <td className="px-5 py-4 text-xs font-normal text-black/80">
                       {membership.price}
                     </td>
-                    <td className="px-6 py-4 text-sm text-black">
+                    <td className="px-5 py-4 text-xs font-normal text-black/80">
                       {membership.duration}
                     </td>
-                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleToggleActive(membership.id)}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
@@ -252,14 +381,93 @@ export default function Memberships() {
                         />
                       </button>
                     </td>
-                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                      <button className="text-black/40 hover:text-black/60 transition-colors cursor-pointer">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
-                          <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
-                          <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
-                        </svg>
-                      </button>
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()} style={{ position: 'relative', overflow: 'visible' }}>
+                      <div className="relative membership-menu-container">
+                        <button
+                          ref={(el) => {
+                            if (el) menuButtonRefs.current[membership.id] = el;
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMembershipMenuId(openMembershipMenuId === membership.id ? null : membership.id);
+                          }}
+                          className="p-1.5 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
+                        >
+                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
+                            <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
+                            <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
+                          </svg>
+                        </button>
+                        {openMembershipMenuId === membership.id && (
+                          <div className={`absolute right-0 w-56 md:w-64 bg-white border border-black/10 rounded-lg shadow-lg ${menuPositionAbove[membership.id] ? 'bottom-full mb-2' : 'top-full mt-2'}`} style={{ zIndex: 9999 }}>
+                            <div className="py-1 px-1">
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setOpenMembershipMenuId(null);
+                                  // Handle Edit - navigate to edit page or open edit modal
+                                  console.log("Edit membership:", membership.id);
+                                }}
+                                className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap flex items-center justify-between"
+                              >
+                                <span>Edit</span>
+                                <button
+                                  className="p-1 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Handle edit action
+                                  }}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
+                                    <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
+                                    <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
+                                  </svg>
+                                </button>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setOpenMembershipMenuId(null);
+                                  // Handle Delete - show confirmation popup
+                                  console.log("Delete membership:", membership.id);
+                                }}
+                                className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setOpenMembershipMenuId(null);
+                                  // Handle View Subscribers - navigate to subscribers page
+                                  router.push(`/memberships/subscribers?id=${membership.id}&title=${encodeURIComponent(membership.title)}&price=${encodeURIComponent(membership.price)}&duration=${encodeURIComponent(membership.duration)}`);
+                                }}
+                                className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap flex items-center justify-between"
+                              >
+                                <span>View Subscribers</span>
+                                <button
+                                  className="p-1 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/memberships/subscribers?id=${membership.id}&title=${encodeURIComponent(membership.title)}&price=${encodeURIComponent(membership.price)}&duration=${encodeURIComponent(membership.duration)}`);
+                                  }}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
+                                    <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
+                                    <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
+                                  </svg>
+                                </button>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -302,13 +510,92 @@ export default function Memberships() {
                         }`}
                       />
                     </button>
-                    <button className="text-black/40 hover:text-black/60 transition-colors cursor-pointer flex-shrink-0">
-                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
-                        <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
-                        <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
-                      </svg>
-                    </button>
+                    <div className="relative membership-menu-container">
+                      <button
+                        ref={(el) => {
+                          if (el) menuButtonRefs.current[membership.id] = el;
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMembershipMenuId(openMembershipMenuId === membership.id ? null : membership.id);
+                        }}
+                        className="p-1.5 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white flex-shrink-0"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
+                          <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
+                          <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
+                        </svg>
+                      </button>
+                      {openMembershipMenuId === membership.id && (
+                        <div className={`absolute right-0 w-56 md:w-64 bg-white border border-black/10 rounded-lg shadow-lg ${menuPositionAbove[membership.id] ? 'bottom-full mb-2' : 'top-full mt-2'}`} style={{ zIndex: 9999 }}>
+                          <div className="py-1 px-1">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpenMembershipMenuId(null);
+                                // Handle Edit - navigate to edit page or open edit modal
+                                console.log("Edit membership:", membership.id);
+                              }}
+                              className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap flex items-center justify-between"
+                            >
+                              <span>Edit</span>
+                              <button
+                                className="p-1 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Handle edit action
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
+                                  <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
+                                  <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
+                                </svg>
+                              </button>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpenMembershipMenuId(null);
+                                // Handle Delete - show confirmation popup
+                                console.log("Delete membership:", membership.id);
+                              }}
+                              className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpenMembershipMenuId(null);
+                                // Handle View Subscribers - navigate to subscribers page
+                                router.push(`/memberships/subscribers?id=${membership.id}&title=${encodeURIComponent(membership.title)}&price=${encodeURIComponent(membership.price)}&duration=${encodeURIComponent(membership.duration)}`);
+                              }}
+                              className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap flex items-center justify-between"
+                            >
+                              <span>View Subscribers</span>
+                              <button
+                                className="p-1 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/memberships/subscribers?id=${membership.id}&title=${encodeURIComponent(membership.title)}&price=${encodeURIComponent(membership.price)}&duration=${encodeURIComponent(membership.duration)}`);
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
+                                  <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
+                                  <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
+                                </svg>
+                              </button>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -324,7 +611,7 @@ export default function Memberships() {
             className="absolute inset-0 bg-black/50"
             onClick={() => setIsCreateMembershipSidebarOpen(false)}
           />
-          <div className="relative w-full md:w-[400px] md:min-w-[400px] bg-white h-full shadow-xl overflow-y-auto flex flex-col">
+          <div className="relative w-full md:w-[573px] bg-white h-full shadow-xl overflow-hidden flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between p-4 md:p-6 border-b border-gray-200">
               <h2 className="text-base md:text-lg font-semibold text-black">Create Membership</h2>
@@ -339,11 +626,11 @@ export default function Memberships() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-3 space-y-4 md:space-y-6 min-h-0">
               {/* Membership Title */}
               <div>
                 <label className="block text-xs md:text-sm font-medium text-black mb-2">
-                  Membership Title <span className="text-red-500">*</span>
+                  Membership Title <span className="text-primary">*</span>
                 </label>
                 <input
                   type="text"
@@ -357,7 +644,7 @@ export default function Memberships() {
               {/* Description */}
               <div>
                 <label className="block text-xs md:text-sm font-medium text-black mb-2">
-                  Description <span className="text-red-500">*</span>
+                  Description <span className="text-primary">*</span>
                 </label>
                 <textarea
                   placeholder="Write description explaining the membership here"
@@ -371,7 +658,7 @@ export default function Memberships() {
               {/* Duration */}
               <div>
                 <label className="block text-xs md:text-sm font-medium text-black mb-2">
-                  Duration <span className="text-red-500">*</span>
+                  Duration <span className="text-primary">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -396,7 +683,7 @@ export default function Memberships() {
               {/* Price */}
               <div>
                 <label className="block text-xs md:text-sm font-medium text-black mb-2">
-                  Price <span className="text-red-500">*</span>
+                  Price <span className="text-primary">*</span>
                 </label>
                 <input
                   type="text"
@@ -410,7 +697,7 @@ export default function Memberships() {
               {/* Included Services */}
               <div>
                 <label className="block text-xs md:text-sm font-medium text-black mb-2">
-                  Included Services <span className="text-red-500">*</span>
+                  Included Services <span className="text-primary">*</span>
                 </label>
                 <div className="border border-black/10 rounded-lg overflow-hidden">
                   {/* All Services */}
@@ -721,7 +1008,7 @@ export default function Memberships() {
               {/* Number of Sessions */}
               <div>
                 <label className="block text-xs md:text-sm font-medium text-black mb-2">
-                  Number of Sessions <span className="text-red-500">*</span>
+                  Number of Sessions <span className="text-primary">*</span>
                 </label>
                 <input
                   type="text"
@@ -735,7 +1022,7 @@ export default function Memberships() {
               {/* Eligible Days */}
               <div>
                 <label className="block text-xs md:text-sm font-medium text-black mb-2">
-                  Eligible Days <span className="text-red-500">*</span>
+                  Eligible Days <span className="text-primary">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -784,24 +1071,22 @@ export default function Memberships() {
             </div>
 
             {/* Footer Buttons */}
-            <div className="p-4 md:p-6 border-t border-gray-200 bg-white sticky bottom-0">
-              <div className="flex items-center justify-end gap-2 md:gap-3">
-                <button
-                  onClick={() => setIsCreateMembershipSidebarOpen(false)}
-                  className="px-4 md:px-6 py-2 md:py-2.5 bg-white border border-black/10 rounded-lg text-xs md:text-sm font-medium text-black/60 hover:bg-gray-50 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    // Handle create membership
-                    setIsCreateMembershipSidebarOpen(false);
-                  }}
-                  className="px-4 md:px-6 py-2 md:py-2.5 bg-primary rounded-lg text-xs md:text-sm font-medium text-white hover:bg-primary/90 transition-colors cursor-pointer"
-                >
-                  Create Membership
-                </button>
-              </div>
+            <div className="flex-shrink-0 bg-[#F9F9F9] border-t border-gray-200 p-4 md:p-6 flex items-center gap-3 md:gap-4 z-20">
+              <button
+                onClick={() => setIsCreateMembershipSidebarOpen(false)}
+                className="flex-[1] px-4 md:px-6 py-2 md:py-2.5 bg-white border border-black/10 rounded-lg text-xs md:text-sm font-medium text-black/60 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  // Handle create membership
+                  setIsCreateMembershipSidebarOpen(false);
+                }}
+                className="flex-[3] px-4 md:px-6 py-2 md:py-2.5 bg-primary rounded-lg text-xs md:text-sm font-medium text-white hover:bg-primary/90 transition-colors cursor-pointer"
+              >
+                Create Membership
+              </button>
             </div>
       </div>
         </div>
