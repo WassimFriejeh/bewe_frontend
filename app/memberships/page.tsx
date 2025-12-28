@@ -22,6 +22,8 @@ export default function Memberships() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
   const [isCreateMembershipSidebarOpen, setIsCreateMembershipSidebarOpen] = useState(false);
   const [membershipForm, setMembershipForm] = useState({
     title: "",
@@ -91,12 +93,60 @@ export default function Memberships() {
     );
   };
 
-  const filteredMemberships = memberships.filter(membership => {
-    // Filter by search query
-    const matchesSearch = membership.title.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return matchesSearch;
-  });
+  const getSortedMemberships = () => {
+    if (!sortColumn) return memberships;
+
+    return [...memberships].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortColumn) {
+        case "title":
+          aValue = a.title.toLowerCase();
+          bValue = b.title.toLowerCase();
+          break;
+        case "price":
+          // Extract numeric value from price string (e.g., "$99.00" -> 99.00)
+          aValue = parseFloat(a.price.replace(/[^0-9.]/g, "")) || 0;
+          bValue = parseFloat(b.price.replace(/[^0-9.]/g, "")) || 0;
+          break;
+        case "duration":
+          aValue = a.duration.toLowerCase();
+          bValue = b.duration.toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const getFilteredMemberships = () => {
+    const sorted = getSortedMemberships();
+    if (!searchQuery) return sorted;
+
+    const query = searchQuery.toLowerCase();
+    return sorted.filter(
+      (membership) =>
+        membership.title.toLowerCase().includes(query) ||
+        membership.price.toLowerCase().includes(query) ||
+        membership.duration.toLowerCase().includes(query)
+    );
+  };
+
+  // Reset to page 1 when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const filteredMemberships = getFilteredMemberships();
+  const totalPages = Math.ceil(filteredMemberships.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedMemberships = filteredMemberships.slice(startIndex, endIndex);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -180,179 +230,98 @@ export default function Memberships() {
 
         {/* Search */}
         <div className="mb-4 md:mb-6">
-          <div className="w-full md:max-w-lg">
-            <SearchInput
-              placeholder="Search by membership title"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 max-w-md">
+              <SearchInput
+                placeholder="Search by membership title, price, or duration"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
         {/* Table Container */}
-        <div className="bg-white rounded-lg shadow-sm">
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           {/* Table - Desktop */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
-              <thead className="sticky top-0 z-10 bg-white border-b border-gray-200">
+              <thead className="bg-white border-b border-gray-200">
                 <tr>
-                  <th
-                    className="group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer"
-                    onClick={() => handleSort("title")}
-                  >
-                    <div className="flex items-center gap-2">
-                      Membership Title
-                      <svg 
-                        width="15" 
-                        height="15" 
-                        viewBox="0 0 18 18" 
-                        fill="none" 
-                        xmlns="http://www.w3.org/2000/svg"
-                        className={`transition-colors ${
-                          sortColumn === "title" 
-                            ? "text-primary opacity-100" 
-                            : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
+                  {["Membership Title", "Price", "Duration", "Active / Inactive", "Actions"].map((header) => {
+                    const columnMap: { [key: string]: string } = {
+                      "Membership Title": "title",
+                      "Price": "price",
+                      "Duration": "duration",
+                    };
+                    const sortKey = columnMap[header];
+                    const isSorted = sortColumn === sortKey;
+                    return (
+                      <th
+                        key={header}
+                        onClick={() => sortKey && handleSort(sortKey)}
+                        className={`group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize ${
+                          sortKey ? "cursor-pointer" : ""
                         }`}
                       >
-                        <path 
-                          d="M5.25 3V15" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M12.75 14.25V3" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </div>
-                  </th>
-                  <th
-                    className="group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer"
-                    onClick={() => handleSort("price")}
-                  >
-                    <div className="flex items-center gap-2">
-                      Price
-                      <svg 
-                        width="15" 
-                        height="15" 
-                        viewBox="0 0 18 18" 
-                        fill="none" 
-                        xmlns="http://www.w3.org/2000/svg"
-                        className={`transition-colors ${
-                          sortColumn === "price" 
-                            ? "text-primary opacity-100" 
-                            : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
-                        }`}
-                      >
-                        <path 
-                          d="M5.25 3V15" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M12.75 14.25V3" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </div>
-                  </th>
-                  <th
-                    className="group px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize cursor-pointer"
-                    onClick={() => handleSort("duration")}
-                  >
-                    <div className="flex items-center gap-2">
-                      Duration
-                      <svg 
-                        width="15" 
-                        height="15" 
-                        viewBox="0 0 18 18" 
-                        fill="none" 
-                        xmlns="http://www.w3.org/2000/svg"
-                        className={`transition-colors ${
-                          sortColumn === "duration" 
-                            ? "text-primary opacity-100" 
-                            : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
-                        }`}
-                      >
-                        <path 
-                          d="M5.25 3V15" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M12.75 14.25V3" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                        <path 
-                          d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
-                          stroke="currentColor" 
-                          strokeWidth="1.5" 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </div>
-                  </th>
-                  <th className="px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize">
-                    Active / Inactive
-                  </th>
-                  <th className="px-5 pb-4 pt-5 text-left text-xs font-medium text-black/50 capitalize">
-                    Actions
-                  </th>
+                        <div className="flex items-center gap-2">
+                          {header}
+                          <svg 
+                            width="15" 
+                            height="15" 
+                            viewBox="0 0 18 18" 
+                            fill="none" 
+                            xmlns="http://www.w3.org/2000/svg"
+                            className={`transition-colors ${
+                              isSorted 
+                                ? "text-primary opacity-100" 
+                                : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
+                            }`}
+                          >
+                            <path 
+                              d="M5.25 3V15" 
+                              stroke="currentColor" 
+                              strokeWidth="1.5" 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round"
+                            />
+                            <path 
+                              d="M12.75 14.25V3" 
+                              stroke="currentColor" 
+                              strokeWidth="1.5" 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round"
+                            />
+                            <path 
+                              d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
+                              stroke="currentColor" 
+                              strokeWidth="1.5" 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round"
+                            />
+                            <path 
+                              d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
+                              stroke="currentColor" 
+                              strokeWidth="1.5" 
+                              strokeLinecap="round" 
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredMemberships.map((membership) => (
+                {filteredMemberships.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                      No memberships found
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedMemberships.map((membership) => (
                   <tr
                     key={membership.id}
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
@@ -391,12 +360,14 @@ export default function Memberships() {
                             e.stopPropagation();
                             setOpenMembershipMenuId(openMembershipMenuId === membership.id ? null : membership.id);
                           }}
-                          className="p-1.5 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
+                          className="p-0 transition-colors cursor-pointer"
                         >
-                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
-                            <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
-                            <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
+                          <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="3" y="3" width="38" height="38" rx="4.31818" fill="#F9F9F9"/>
+                            <rect x="3.43182" y="3.43182" width="37.1364" height="37.1364" rx="3.88636" stroke="black" strokeOpacity="0.2" strokeWidth="0.863636"/>
+                            <path d="M21.9934 22H22.0003" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M21.9866 27.1797H21.9936" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M22.0001 16.8125H22.0071" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         </button>
                         {openMembershipMenuId === membership.id && (
@@ -413,19 +384,13 @@ export default function Memberships() {
                                 className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap flex items-center justify-between"
                               >
                                 <span>Edit</span>
-                                <button
-                                  className="p-1 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // Handle edit action
-                                  }}
-                                >
+                                <div className="p-1 rounded transition-colors text-black/40">
                                   <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
                                     <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
                                     <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
                                   </svg>
-                                </button>
+                                </div>
                               </button>
                               <button
                                 onClick={(e) => {
@@ -450,19 +415,13 @@ export default function Memberships() {
                                 className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap flex items-center justify-between"
                               >
                                 <span>View Subscribers</span>
-                                <button
-                                  className="p-1 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(`/memberships/subscribers?id=${membership.id}&title=${encodeURIComponent(membership.title)}&price=${encodeURIComponent(membership.price)}&duration=${encodeURIComponent(membership.duration)}`);
-                                  }}
-                                >
+                                <div className="p-1 rounded transition-colors text-black/40">
                                   <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
                                     <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
                                     <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
                                   </svg>
-                                </button>
+                                </div>
                               </button>
                             </div>
                           </div>
@@ -470,14 +429,20 @@ export default function Memberships() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-
+          
           {/* Cards - Mobile/Tablet */}
           <div className="block md:hidden divide-y divide-gray-200">
-            {filteredMemberships.map((membership) => (
+            {filteredMemberships.length === 0 ? (
+              <div className="px-4 py-8 text-center text-gray-500">
+                No memberships found
+              </div>
+            ) : (
+              paginatedMemberships.map((membership) => (
               <div
                 key={membership.id}
                 className="p-3 md:p-4 cursor-pointer hover:bg-gray-50 transition-colors"
@@ -519,12 +484,14 @@ export default function Memberships() {
                           e.stopPropagation();
                           setOpenMembershipMenuId(openMembershipMenuId === membership.id ? null : membership.id);
                         }}
-                        className="p-1.5 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white flex-shrink-0"
+                        className="p-0 transition-colors cursor-pointer flex-shrink-0"
                       >
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
-                          <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
-                          <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
+                        <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <rect x="3" y="3" width="38" height="38" rx="4.31818" fill="#F9F9F9"/>
+                          <rect x="3.43182" y="3.43182" width="37.1364" height="37.1364" rx="3.88636" stroke="black" strokeOpacity="0.2" strokeWidth="0.863636"/>
+                          <path d="M21.9934 22H22.0003" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M21.9866 27.1797H21.9936" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M22.0001 16.8125H22.0071" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       </button>
                       {openMembershipMenuId === membership.id && (
@@ -541,19 +508,13 @@ export default function Memberships() {
                               className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap flex items-center justify-between"
                             >
                               <span>Edit</span>
-                              <button
-                                className="p-1 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Handle edit action
-                                }}
-                              >
+                              <div className="p-1 rounded transition-colors text-black/40">
                                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                                   <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
                                   <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
                                   <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
                                 </svg>
-                              </button>
+                              </div>
                             </button>
                             <button
                               onClick={(e) => {
@@ -578,19 +539,13 @@ export default function Memberships() {
                               className="w-full text-left px-3 md:px-4 py-2 text-xs md:text-sm text-black hover:bg-black hover:text-white transition-colors cursor-pointer rounded whitespace-nowrap flex items-center justify-between"
                             >
                               <span>View Subscribers</span>
-                              <button
-                                className="p-1 rounded transition-colors cursor-pointer text-black/40 hover:bg-black hover:text-white"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  router.push(`/memberships/subscribers?id=${membership.id}&title=${encodeURIComponent(membership.title)}&price=${encodeURIComponent(membership.price)}&duration=${encodeURIComponent(membership.duration)}`);
-                                }}
-                              >
+                              <div className="p-1 rounded transition-colors text-black/40">
                                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                                   <path d="M10 10.8333C10.4602 10.8333 10.8333 10.4602 10.8333 10C10.8333 9.53976 10.4602 9.16667 10 9.16667C9.53976 9.16667 9.16667 9.53976 9.16667 10C9.16667 10.4602 9.53976 10.8333 10 10.8333Z" fill="currentColor"/>
                                   <path d="M10 5.83333C10.4602 5.83333 10.8333 5.46024 10.8333 5C10.8333 4.53976 10.4602 4.16667 10 4.16667C9.53976 4.16667 9.16667 4.53976 9.16667 5C9.16667 5.46024 9.53976 5.83333 10 5.83333Z" fill="currentColor"/>
                                   <path d="M10 15.8333C10.4602 15.8333 10.8333 15.4602 10.8333 15C10.8333 14.5398 10.4602 14.1667 10 14.1667C9.53976 14.1667 9.16667 14.5398 9.16667 15C9.16667 15.4602 9.53976 15.8333 10 15.8333Z" fill="currentColor"/>
                                 </svg>
-                              </button>
+                              </div>
                             </button>
                           </div>
                         </div>
@@ -599,7 +554,8 @@ export default function Memberships() {
                   </div>
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

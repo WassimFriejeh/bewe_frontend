@@ -72,6 +72,38 @@
     z-index: 1;
 }
 
+.cancel-action-btn:hover .cancel-btn-bg,
+.cancel-action-btn:active .cancel-btn-bg {
+    fill: #EF4444;
+}
+
+.cancel-action-btn:hover .cancel-btn-border,
+.cancel-action-btn:active .cancel-btn-border {
+    stroke: #EF4444;
+    stroke-opacity: 1;
+}
+
+.cancel-action-btn:hover .cancel-btn-x,
+.cancel-action-btn:active .cancel-btn-x {
+    stroke: white;
+}
+
+.cancel-action-btn-mobile:hover .cancel-btn-bg-mobile,
+.cancel-action-btn-mobile:active .cancel-btn-bg-mobile {
+    fill: #EF4444;
+}
+
+.cancel-action-btn-mobile:hover .cancel-btn-border-mobile,
+.cancel-action-btn-mobile:active .cancel-btn-border-mobile {
+    stroke: #EF4444;
+    stroke-opacity: 1;
+}
+
+.cancel-action-btn-mobile:hover .cancel-btn-x-mobile,
+.cancel-action-btn-mobile:active .cancel-btn-x-mobile {
+    stroke: white;
+}
+
 .login-button span {
     position: relative;
     z-index: 1;
