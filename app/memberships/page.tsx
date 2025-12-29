@@ -266,47 +266,49 @@ export default function Memberships() {
                       >
                         <div className="flex items-center gap-2">
                           {header}
-                          <svg 
-                            width="15" 
-                            height="15" 
-                            viewBox="0 0 18 18" 
-                            fill="none" 
-                            xmlns="http://www.w3.org/2000/svg"
-                            className={`transition-colors ${
-                              isSorted 
-                                ? "text-primary opacity-100" 
-                                : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
-                            }`}
-                          >
-                            <path 
-                              d="M5.25 3V15" 
-                              stroke="currentColor" 
-                              strokeWidth="1.5" 
-                              strokeLinecap="round" 
-                              strokeLinejoin="round"
-                            />
-                            <path 
-                              d="M12.75 14.25V3" 
-                              stroke="currentColor" 
-                              strokeWidth="1.5" 
-                              strokeLinecap="round" 
-                              strokeLinejoin="round"
-                            />
-                            <path 
-                              d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
-                              stroke="currentColor" 
-                              strokeWidth="1.5" 
-                              strokeLinecap="round" 
-                              strokeLinejoin="round"
-                            />
-                            <path 
-                              d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
-                              stroke="currentColor" 
-                              strokeWidth="1.5" 
-                              strokeLinecap="round" 
-                              strokeLinejoin="round"
-                            />
-                          </svg>
+                          {sortKey && (
+                            <svg 
+                              width="15" 
+                              height="15" 
+                              viewBox="0 0 18 18" 
+                              fill="none" 
+                              xmlns="http://www.w3.org/2000/svg"
+                              className={`transition-colors ${
+                                isSorted 
+                                  ? "text-primary opacity-100" 
+                                  : "text-gray-400 opacity-50 group-hover:text-primary group-hover:opacity-100"
+                              }`}
+                            >
+                              <path 
+                                d="M5.25 3V15" 
+                                stroke="currentColor" 
+                                strokeWidth="1.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                              />
+                              <path 
+                                d="M12.75 14.25V3" 
+                                stroke="currentColor" 
+                                strokeWidth="1.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                              />
+                              <path 
+                                d="M7.5 5.24998C7.5 5.24998 5.8429 3.00001 5.24998 3C4.65706 2.99999 3 5.25 3 5.25" 
+                                stroke="currentColor" 
+                                strokeWidth="1.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                              />
+                              <path 
+                                d="M15 12.75C15 12.75 13.3429 15 12.75 15C12.157 15 10.5 12.75 10.5 12.75" 
+                                stroke="currentColor" 
+                                strokeWidth="1.5" 
+                                strokeLinecap="round" 
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
                         </div>
                       </th>
                     );
